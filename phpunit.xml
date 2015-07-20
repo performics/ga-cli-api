@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="bootstrap_test.php">
+	<php>
+		<const name="TEST_DB_SCHEMA_DIRECTORY" value="oauth,google_analytics_api"/>
+	</php>
+	<groups>
+		<exclude>
+			<group>meta</group>
+			<group>nested</group>
+		</exclude>
+	</groups>
+	<testsuites>
+		<testsuite>
+			<directory suffix="TestCase.class.php">src/GenericAPI</directory>
+		</testsuite>
+		<testsuite>
+			<directory suffix="TestCase.class.php">src/DataStructures</directory>
+		</testsuite>
+		<testsuite>
+			<directory suffix="TestCase.class.php">src/Email</directory>
+		</testsuite>
+		<testsuite>
+			<directory suffix="TestCase.class.php">src/Google</directory>
+		</testsuite>
+		<testsuite>
+			<directory suffix="TestCase.class.php">src/Logger</directory>
+		</testsuite>
+		<testsuite>
+			<directory suffix="TestCase.class.php">src/LoggingExceptions</directory>
+		</testsuite>
+		<testsuite>
+			<directory suffix="TestCase.class.php">src/Mutex</directory>
+		</testsuite>
+		<testsuite>
+			<directory suffix="TestCase.class.php">src/OAuth</directory>
+		</testsuite>
+		<testsuite>
+			<directory suffix="TestCase.class.php">src/PFXUtils</directory>
+		</testsuite>
+		<testsuite>
+			<directory suffix="TestCase.class.php">src/SharedMemory</directory>
+		</testsuite>
+		<testsuite>
+			<directory suffix="TestCase.class.php">src/URL</directory>
+		</testsuite>
+		<testsuite>
+			<directory suffix="TestCase.class.php">src/Validator</directory>
+		</testsuite>
+	</testsuites>
+</phpunit>

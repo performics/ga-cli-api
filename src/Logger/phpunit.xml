@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="../classLoader.inc.php">
+	<testsuites>
+		<testsuite>
+			<directory suffix="TestCase.class.php">.</directory>
+		</testsuite>
+	</testsuites>
+</phpunit>

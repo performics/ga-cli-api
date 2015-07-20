@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="../bootstrap_db.php">
+	<php>
+		<const name="TEST_DB_SCHEMA_DIRECTORY" value="oauth"/>
+	</php>
+	<testsuites>
+		<testsuite>
+			<directory suffix="TestCase.class.php">.</directory>
+		</testsuite>
+	</testsuites>
+</phpunit>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+The attributes of the <conf> element should be used to specify any arguments
+that apply to the entire report, such as the output file or email recipient.
+Default arguments that will apply to every query to be executed may be
+specified here as well; these may be selectively overridden within the <query>
+configuration element. The attribute names here and throughout the XML
+configuration should match those used in the query.php command-line runner. As
+in the command-line runner, an email address or output file must be specified.
+-->
+<conf
+	profile-id="12345"
+	email="foo@bar.baz"
+>
+	<queries>
+		<!--
+		Each query should be configured via a <query> element. As in the
+		command-line query runner, a profile name or ID, a start date, an end
+		date, and at least one metric must be specified for each query.
+		-->
+		<query
+			name="Traffic and revenue"
+			start-date="LAST_MONTH_START"
+			end-date="LAST_MONTH_END"
+			metric="sessions,transactionRevenue"
+		/>
+	</queries>
+</conf>

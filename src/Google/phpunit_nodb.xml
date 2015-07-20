@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="../bootstrap_db.php">
+	<php>
+		<const name="TEST_IGNORE_DB" value="1"/>
+	</php>
+	<groups>
+		<exclude>
+			<group>meta</group>
+			<group>nested</group>
+		</exclude>
+	</groups>
+	<testsuites>
+		<testsuite>
+			<directory suffix="TestCase.class.php">./Analytics</directory>
+		</testsuite>
+	</testsuites>
+</phpunit>
