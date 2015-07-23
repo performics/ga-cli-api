@@ -1,5 +1,5 @@
 <?php
-require_once(__DIR__ . '/../classes/classLoader.inc.php');
+require_once(__DIR__ . '/src/classLoader.inc.php');
 
 /* Bootstrap file TEMPLATE for testing Google Analytics API applications */
 

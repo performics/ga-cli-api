@@ -28,7 +28,7 @@ try {
         sortByName($webProperties);
         foreach ($webProperties as $webProperty) {
             printf(
-                "\t\t(web property:%s) (%s) %s:\n",
+                "\t(web property:%s) (%s) %s:\n",
                 $webProperty->getID(),
                 $webProperty->getName(),
                 $webProperty->getURL()
@@ -37,7 +37,7 @@ try {
             sortByName($profiles);
             foreach ($profiles as $profile) {
                 printf(
-                    "\t\t\t(profile:%s) %s\n",
+                    "\t\t(profile:%s) %s\n",
                     $profile->getID(),
                     $profile->getName()
                 );

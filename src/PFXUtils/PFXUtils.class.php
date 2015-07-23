@@ -1238,7 +1238,8 @@ EOF;
                 );
             }
             fseek($zHandle, -4, SEEK_END);
-            $size = end(unpack('V', fread($zHandle, 4)));
+            $data = unpack('V', fread($zHandle, 4));
+            $size = end($data);
             fclose($zHandle);
             $zHandle = gzopen($file, 'rb');
             $handle = fopen($inflated, 'wb');
@@ -1630,7 +1631,7 @@ EOF;
      * @param string $input
      * @return string
      */
-    public function guessEOLInString($input) {
+    public static function guessEOLInString($input) {
         $fh = fopen('php://memory', 'wb');
         fwrite($fh, $input);
         $eol = self::guessEOL($fh);

@@ -293,7 +293,9 @@ class URL {
         for the non-exception rules, as we don't yet know the length of these
         rules, so we'll need to keep track of any matching ones and return the
         longest one. */
-        if (isset(self::$_suffixList[$topLabel][0])) {
+        if (isset(self::$_suffixList[$topLabel][0]) &&
+            self::$_suffixList[$topLabel][0])
+        {
             $matchingRule = null;
             $matchingRuleLength = 0;
             foreach (self::$_suffixList[$topLabel][0] as $rule) {

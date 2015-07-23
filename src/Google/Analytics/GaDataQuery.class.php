@@ -236,6 +236,10 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
+	 * Sets the Google Analytics profile from which the query will pull its
+	 * data. This may be passed either as a numeric profile ID or as a
+	 * Google\Analytics\ProfileSummary object.
+	 *
 	 * @param Google\Analytics\ProfileSummary, string $profile
 	 */
 	public function setProfile($profile) {
@@ -267,6 +271,10 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
+	 * Sets the query's start date, expressed as a string, one of the date
+	 * shortcut constants defined in the Google\Analytics\GaDataQuery class, or
+	 * a DateTime instance.
+	 *
 	 * @param string, int, DateTime $startDate
 	 */
 	public function setStartDate($startDate) {
@@ -274,6 +282,10 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
+	 * Sets the query's end date, expressed as a string, one of the date
+	 * shortcut constants defined in the Google\Analytics\GaDataQuery class, or
+	 * a DateTime instance.
+	 *
 	 * @param string, int, DateTime $endDate
 	 */
 	public function setEndDate($endDate) {
@@ -281,6 +293,9 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
+	 * Sets the metrics to be used in the query, either as a comma-delimited
+	 * string or as an array.
+	 *
 	 * @param string, array $metrics
 	 */
 	public function setMetrics($metrics) {
@@ -291,6 +306,9 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
+	 * Sets the dimensions to be used in the query, either as a comma-delimited
+	 * string or as an array.
+	 *
 	 * @param string, array $dimensions
 	 */
 	public function setDimensions($dimensions) {
@@ -301,6 +319,10 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
+	 * Sets the sort order for the data to be returned from the query, either
+	 * as a formatted (comma-delimited) string, an array of sort order
+	 * component strings, or a Google\Analytics\GaDataSort instance.
+	 *
 	 * @param string, array, Google\Analytics\GaDataSortOrder $sort
 	 */
 	public function setSort($sort) {
@@ -320,6 +342,11 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
+	 * Sets a filter to be imposed on the query, either as a string formatted
+	 * as described in Google's API documentation
+	 * (https://developers.google.com/analytics/devguides/reporting/core/v3/reference#filters)
+	 * or as a Google\Analytics\GaDataFilterCollection instance.
+	 *
 	 * @param string, Google\Analytics\GaDataFilterCollection $filter
 	 */
 	public function setFilter($filter) {
@@ -338,6 +365,11 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
+	 * Sets a segment from which to pull the data for this query, either as a
+	 * string formatted as described in Google's Segments Dev Guide
+	 * (https://developers.google.com/analytics/devguides/reporting/core/v3/segments)
+	 * or as a Google\Analytics\GaDataSegment instance.
+	 *
 	 * @param int, string, Google\Analytics\GaDataSegment $segment
 	 */
 	public function setSegment($segment) {
@@ -359,6 +391,10 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
+	 * Sets the sampling level for the query, either as one of the
+	 * Google\Analytics\GaDataQuery::SAMPLING_LEVEL_* constants or its all-caps
+	 * string equivalent.
+	 *
 	 * @param string, int $samplingLevel
 	 */
 	public function setSamplingLevel($samplingLevel) {
@@ -404,6 +440,21 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
+	 * Sets a format string, compatible with PHP's date() function, that will
+	 * be used by Google\Analytics\GaDataQuery::iteration() to format the start
+	 * date into a readable value.
+	 *
+	 * @param string $format
+	 */
+	public function setFormatString($format) {
+		$this->_formatString = $format;
+	}
+	
+	/**
+	 * Associates a Google\Analytics\API instance with the query so that
+	 * profile IDs or names may be resolved to Google\Analytics\ProfileSummary
+	 * instances where necessary.
+	 *
 	 * @param Google\Analytics\API $api
 	 */
 	public function setAPIInstance(API $api) {
@@ -412,8 +463,9 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	
 	/**
 	 * Returns a Google\Analytics\ProfileSummary instance. Note that if a
-	 * profile ID or name was set previously, and no API instance has yet been
-	 * set, this method will throw a Google\Analytics\LogicException.
+	 * profile was set by ID or name previously, and no API instance has yet
+	 * been set via Google\Analytics\GaDataQuery::setAPIInstance(), this method
+	 * will throw a Google\Analytics\LogicException.
 	 *
 	 * @return Google\Analytics\ProfileSummary
 	 */
@@ -433,17 +485,6 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 		if ($this->_profileName !== null) {
 			return $this->_api->getProfileSummaryByName($this->_profileName);
 		}
-	}
-	
-	/**
-	 * Sets a format string, compatible with PHP's date() function, that will
-	 * be used by $this->iteration() to format the start date into a readable
-	 * value.
-	 *
-	 * @param string $format
-	 */
-	public function setFormatString($format) {
-		$this->_formatString = $format;
 	}
 	
 	/**
@@ -553,7 +594,7 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
-	 * Returns a representation of this object as an array, ready for
+	 * Returns a representation of this instance as an array, ready for
 	 * submission to the API.
 	 *
 	 * @return array

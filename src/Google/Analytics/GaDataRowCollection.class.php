@@ -31,8 +31,8 @@ class GaDataRowCollection {
 	}
 	
 	/**
-	 * Sets the column headers associated with this row collection so that we
-	 * can generate associative arrays of data.
+	 * Sets the column headers associated with this instance so that it can
+	 * generate associative arrays of data.
 	 *
 	 * @param Google\Analytics\GaDataColumnHeaderCollection $columns
 	 */
@@ -43,7 +43,13 @@ class GaDataRowCollection {
 	
 	/**
 	 * Returns the next row from this data set in a way modeled after
-	 * PDOStatement and similar database abstraction layers.
+	 * PDOStatement and similar database abstraction layers. This method's
+	 * argument should be one of the
+	 * Google\Analytics\GaDataRowCollection::FETCH_NUM or
+	 * Google\Analytics\GaDataRowCollection::FETCH_ASSOC constants, optionally
+	 * masked with the Google\Analytics\GaDataRowCollection::FETCH_TYPECAST
+	 * flag, which ensures that any data that looks like a number is returned
+	 * as a numeric type.
 	 *
 	 * @param int $fetchStyle = self::FETCH_NUM
 	 * @return array, boolean
@@ -85,7 +91,7 @@ class GaDataRowCollection {
 	}
 	
 	/**
-	 * Resets the internal row pointer so that the contents of this collection
+	 * Resets the internal row pointer so that the contents of the collection
 	 * may be fetched again.
 	 */
 	public function reset() {

@@ -13,7 +13,8 @@ class GaDataSegmentSequenceCondition extends GaDataSegmentSimpleCondition {
 	
 	/**
 	 * Instantiates a new sequence condition, either from a single string or
-	 * from its distinct components.
+	 * from its distinct components, and optionally with additional conditions
+	 * that extend this one via a logical and.
 	 *
 	 * @param string $expression
 	 * @param string $operator = null

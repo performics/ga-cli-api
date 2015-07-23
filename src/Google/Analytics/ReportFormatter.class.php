@@ -5,7 +5,6 @@ class ReportFormatter {
     /* This report formatter writes its output as a simple CSV table. */
     protected $_fileName;
     protected $_fileHandle;
-    protected $_email;
     protected $_bytesWritten = 0;
     // This property will increment with each call to $this->writeMetadata()
     protected $_reportIndex = 0;

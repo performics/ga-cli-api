@@ -1437,7 +1437,10 @@ EOF;
             'Quoted-Printable',
             /* This is problematic due to the way mb_convert_encoding breaks up
             lines into 78-byte chunks on the way out. */
-            'BASE64'
+            'BASE64',
+            /* It seems like this character set uses some meta characters that
+            interfere with the back-and-forth conversion. */
+            'SJIS-2004'
         );
         $targetEncodings = array('UTF-8', 'ASCII');
         foreach ($sourceEncodings as $sourceEncoding) {

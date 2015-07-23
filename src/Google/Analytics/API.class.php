@@ -1018,7 +1018,7 @@ EOF;
     
     /**
      * Returns an array of Google\Analytics\Segment objects that describe the
-     * segments to which the effective credentials permit access.
+     * preset segments to which the effective credentials permit access.
      *
      * @return array
      */
@@ -1094,8 +1094,9 @@ EOF;
     
     /**
      * Performs a Google Analytics query with the given Google\Analytics\IQuery
-     * object and writes the result to the given file in CSV format. Returns
-     * the number of bytes written.
+     * object and writes the result to a file using the given
+     * Google\Analytics\ReportFormatter object. Returns the number of bytes
+     * written.
      *
      * @param Google\Analytics\IQuery $query
      * @param Google\Analytics\ReportFormatter $formatter
@@ -1165,12 +1166,12 @@ EOF;
      * Performs a Google Analytics query with the given Google\Analytics\IQuery
      * object and attaches the result to the given Email instance. If the email
      * does not yet have a subject, one will be set automatically. If failures
-     * that took place while running the query (e.g. the query declared a
-     * preference for no data sampling and one or more iterations contained
-     * sampled data), a message regarding the failure will be appended to the
-     * email automatically. If a file path is provided as the fourth argument,
-     * the report will be copied to that location in addition to being attached
-     * to the email.
+     * took place while running the query (e.g. the query declared a preference
+     * for no data sampling and one or more iterations contained sampled data),
+     * a message regarding the failure will be appended to the email
+     * automatically. If a file path is provided as the fourth argument, the
+     * report will be copied to that location in addition to being attached to
+     * the email.
      *
      * @param Google\Analytics\IQuery $query
      * @param Google\Analytics\ReportFormatter $formatter

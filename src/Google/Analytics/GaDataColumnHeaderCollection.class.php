@@ -66,7 +66,7 @@ class GaDataColumnHeaderCollection {
 	}
 	
 	/**
-	 * Returns a column instance given its numeric index.
+	 * Returns a column instance given its 0-based numeric index.
 	 *
 	 * @param int $index
 	 * @return Google\Analytics\Column

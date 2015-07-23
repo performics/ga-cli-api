@@ -5,8 +5,8 @@ abstract class IterativeGaDataQuery extends GaDataQuery {
 	protected $_iterativeName = 'Iteration';
 	
 	/**
-	 * Sets an arbitrary name to use for the "column" represented by this
-	 * interval.
+	 * Sets an arbitrary name to use for the "column" header represented by
+	 * this instance's iterative property.
 	 *
 	 * @param string $iterativeName
 	 */

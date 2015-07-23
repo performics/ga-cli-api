@@ -12,8 +12,8 @@ class DateRangeGaDataQuery extends IterativeGaDataQuery {
 	 * iteration interval.
 	 *
 	 * @param array $apiData = null
-	 * @param string, DateTime $startDate = null
-	 * @param string, DateTime $endDate = null
+	 * @param string, int, DateTime $startDate = null
+	 * @param string, int, DateTime $endDate = null
 	 * @param DateInterval $interval = null
 	 */
 	public function __construct(

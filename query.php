@@ -35,7 +35,7 @@ and dimension names is not required.
 A series of shortcuts for dates (e.g. LAST_MONTH_START and THIS_WEEK_END) exists; these may be
 invoked by specifying the shortcut as a string in all caps. The shortcuts take the following form:
 
-(THIS|LAST)_(WEEK|ISO_WEEK|MONTH|YEAR)_(START|END)
+(THIS|LAST)_(WEEK|ISO_WEEK|MONTH|YEAR)_(START|END)[_YOY]
 
 Any of these shortcuts may have the suffix _YOY, which provides the corresponding date from the
 previous year.

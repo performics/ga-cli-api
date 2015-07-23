@@ -7,7 +7,7 @@ class SerializableFixedArrayTestCase extends \TestHelpers\TestCase {
      */
     public function testType() {
         $instance = SerializableFixedArray::factory();
-        if (version_compare(PHP_VERSION, '5.5.0') >= 0) {
+        if (version_compare(PHP_VERSION, '5.4.19') >= 0) {
             $this->assertInstanceOf('\SplFixedArray', $instance);
         }
         else {

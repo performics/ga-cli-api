@@ -4,7 +4,8 @@ namespace Google\Analytics;
 class GaDataFilterCollection extends GaDataLogicalCollection {
 	/**
 	 * Validates that the argument is a Google\Analytics\GaDataFilterCollection
-	 * or Google\Analytics\GaDataConditionalExpression instance.
+	 * or Google\Analytics\GaDataConditionalExpression instance and adds it to
+	 * the collection if so.
 	 *
 	 * @param Google\Analytics\GaDataFilterCollection, Google\Analytics\GaDataConditionalExpression $member
 	 */
