@@ -41,10 +41,8 @@ Any optional setting that is left unused should be commented out or removed from
 
 Although a database is not required in order to run this application, the use of a database enables various optimizations such as the caching of OAuth tokens and Google Analytics column definitions. This application assumes that the database type, if used, is MySQL. To enable database support, define the `OAUTH_DB_*` settings appropriately and ensure that each script under the ga-cli-api/schemata/ directory has been run before using the application, e.g.:
 
-`
-mysql < ga-cli-api/schemata/oauth/oauth.mysql.sql
-mysql < ga-cli-api/schemata/google_analytics_api/google_analytics_api.mysql.sql
-`
+`mysql < ga-cli-api/schemata/oauth/oauth.mysql.sql`
+`mysql < ga-cli-api/schemata/google_analytics_api/google_analytics_api.mysql.sql`
 
 ### Testing
 
