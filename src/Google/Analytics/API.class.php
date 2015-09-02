@@ -70,6 +70,7 @@ class API extends \Google\ServiceAccountAPI {
     private $_logger;
     // This isn't really useful. May re-implement someday.
     //private $_failureReason;
+    private $_totalRows;
     
     public function __construct() {
         try {
@@ -135,11 +136,12 @@ EOF;
         ] = self::$_dbConn->prepare($q);
         $q = <<<EOF
 INSERT INTO google_analytics_api_account_summaries
-(gid, name, cdate)
+(gid, name, visible, cdate)
 VALUES
-(:gid, :name, UNIX_TIMESTAMP())
+(:gid, :name, 1, UNIX_TIMESTAMP())
 ON DUPLICATE KEY UPDATE
-name = VALUES(name)
+name = VALUES(name),
+visible = VALUES(visible)
 EOF;
         self::$_DB_STATEMENTS['google_analytics_api_account_summaries'][
             'insert'
@@ -154,14 +156,15 @@ EOF;
         ] = self::$_dbConn->prepare($q);
         $q = <<<EOF
 INSERT INTO google_analytics_api_web_property_summaries
-(gid, gaaas_id, name, url, level, cdate)
+(gid, gaaas_id, name, url, level, visible, cdate)
 VALUES
-(:gid, :gaaas_id, :name, :url, :level, UNIX_TIMESTAMP())
+(:gid, :gaaas_id, :name, :url, :level, 1, UNIX_TIMESTAMP())
 ON DUPLICATE KEY UPDATE
 gaaas_id = VALUES(gaaas_id),
 name = VALUES(name),
 url = VALUES(url),
-level = VALUES(level)
+level = VALUES(level),
+visible = VALUES(visible)
 EOF;
         self::$_DB_STATEMENTS['google_analytics_api_web_property_summaries'][
             'insert'
@@ -176,13 +179,14 @@ EOF;
         ] = self::$_dbConn->prepare($q);
         $q = <<<EOF
 INSERT INTO google_analytics_api_profile_summaries
-(gid, gaawps_id, name, type, cdate)
+(gid, gaawps_id, name, type, visible, cdate)
 VALUES
-(:gid, :gaawps_id, :name, :type, UNIX_TIMESTAMP())
+(:gid, :gaawps_id, :name, :type, 1, UNIX_TIMESTAMP())
 ON DUPLICATE KEY UPDATE
 gaawps_id = VALUES(gaawps_id),
 name = VALUES(name),
-type = VALUES(type)
+type = VALUES(type),
+visible = VALUES(visible)
 EOF;
         self::$_DB_STATEMENTS['google_analytics_api_profile_summaries'][
             'insert'
@@ -1027,6 +1031,15 @@ EOF;
     }
     
     /**
+     * Returns the total count of rows fetched in the last query.
+     *
+     * @return int
+     */
+    public function getLastFetchedRowCount() {
+        return $this->_totalRows;
+    }
+    
+    /**
      * Performs a Google Analytics query with the given
      * Google\Analytics\GaDataQuery object and returns the result as a
      * Google\Analytics\GaData object.
@@ -1046,6 +1059,7 @@ EOF;
             }
             else {
                 $this->_activeQuery = $hash;
+                $this->_totalRows = 0;
                 $response = $this->_makeRequest(
                     self::URL_BASE . 'data/ga', $query->getAsArray()
                 );
@@ -1082,6 +1096,7 @@ EOF;
             );
             // I also want the rows object to be aware of the columns object
             $rows = $response->getRows();
+            $this->_totalRows += count($rows);
             if ($rows) {
                 $rows->setColumnHeaders($response->getColumnHeaders());
             }

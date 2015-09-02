@@ -395,28 +395,6 @@ class URL {
     }
     
     /**
-     * Helper function that gets called a couple of times in $this->_parseTLD()
-     * in order to preserve the original URL input when matching against
-     * IDNs.
-     *
-     * @param array &$matchSlice
-     * @param array $asciiComponents
-     * @param int $offset
-     */
-    private static function _restoreASCIIDomainComponents(
-        array &$matchSlice,
-        array $asciiComponents,
-        $offset
-    ) {
-        foreach ($asciiComponents as $index => $component) {
-            $matchSliceIndex = $index - $offset;
-            if (array_key_exists($matchSliceIndex, $matchSlice)) {
-                $matchSlice[$index - $offset] = $component;
-            }
-        }
-    }
-    
-    /**
      * Handles the boilerplate work of normalizing something that may be a
      * string to a URL object for the purposes of doing further comparison.
      * If a callback is passed as the third argument, it will be run if the

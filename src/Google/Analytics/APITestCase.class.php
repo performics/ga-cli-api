@@ -1161,6 +1161,10 @@ EOF;
         }
         $data = $instance->query($query);
         $this->_runAssertions($expected, $data);
+        $this->assertEquals(
+            count(APITestData::$TEST_QUERY_RESPONSE_ROWS),
+            $instance->getLastFetchedRowCount()
+        );
         /* The Google\Analytics\GaData object's "id" is its URL, which should
         have been what was requested. The boilerplate API code probably URL-
         encoded its parameters, though. */
@@ -1202,6 +1206,10 @@ EOF;
         }
         $data = $instance->query($query);
         $this->_runAssertions($expected, $data);
+        $this->assertEquals(
+            count(APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_1),
+            $instance->getLastFetchedRowCount()
+        );
         $requestURL = new \URL(urldecode((string)$instance->getRequestURL()));
         $this->assertTrue($requestURL->compare($data->getID()));
         $expected['getRows'] = new GaDataRowCollection(
@@ -1212,6 +1220,11 @@ EOF;
         $expected['getNextLink'] = 'https://www.googleapis.com/analytics/v3/data/ga?ids=ga:12345&dimensions=ga:source&metrics=ga:users%2Cga:organicSearches&start-date=2015-06-01&end-date=2015-06-02&start-index=11&max-results=5';
         $data = $instance->query($query);
         $this->_runAssertions($expected, $data);
+        $this->assertEquals(
+            count(APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_1) +
+            count(APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_2),
+            $instance->getLastFetchedRowCount()
+        );
         $requestURL = new \URL(urldecode((string)$instance->getRequestURL()));
         $this->assertTrue($requestURL->compare($data->getID()));
         // Might as well test what happens when we write this query to a file
@@ -1239,6 +1252,11 @@ EOF;
         while ($row = fgetcsv($fh)) {
             $this->assertEquals($expectedRows[$i++], $row);
         }
+        $this->assertEquals(
+            count(APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_1) +
+            count(APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_2),
+            $instance->getLastFetchedRowCount()
+        );
     }
     
     /**
@@ -1342,8 +1360,20 @@ EOF;
             $expectedInstance['getColumnHeaders']
         );
         $expected[] = $expectedInstance;
+        /* By the time we hit the third iteration, the response count will
+        include the rows from both the second and third iterations, because
+        those queries hash the same. */
+        $expectedCounts = array(
+            count(APITestData::$TEST_ITERATIVE_QUERY_RESPONSE_ROWS_1),
+            count(APITestData::$TEST_ITERATIVE_QUERY_RESPONSE_ROWS_2),
+            count(APITestData::$TEST_ITERATIVE_QUERY_RESPONSE_ROWS_2) +
+            count(APITestData::$TEST_ITERATIVE_QUERY_RESPONSE_ROWS_3)
+        );
         $i = 0;
         while ($data = $instance->query($query)) {
+            $this->assertEquals(
+                $expectedCounts[$i], $instance->getLastFetchedRowCount()
+            );
             $this->_runAssertions($expected[$i++], $data);
             $requestURL = new \URL(
                 urldecode((string)$instance->getRequestURL())
@@ -1370,6 +1400,9 @@ EOF;
         );
         $i = 1;
         while ($data = $instance->query($query)) {
+            $this->assertEquals(
+                $expectedCounts[$i], $instance->getLastFetchedRowCount()
+            );
             $this->_runAssertions($expected[$i++], $data);
             $requestURL = new \URL(
                 urldecode((string)$instance->getRequestURL())
@@ -1395,6 +1428,11 @@ EOF;
             __NAMESPACE__ . '\FailedIterationsException',
             array($instance, 'queryToFile'),
             array($query, $formatter)
+        );
+        $this->assertEquals(
+            count(APITestData::$TEST_ITERATIVE_QUERY_RESPONSE_ROWS_2) +
+            count(APITestData::$TEST_ITERATIVE_QUERY_RESPONSE_ROWS_3),
+            $instance->getLastFetchedRowCount()
         );
         $fh = fopen($formatter->getFileName(), 'r');
         $expectedHeaders = array_merge(
@@ -1432,6 +1470,11 @@ EOF;
         $formatter = new ReportFormatter();
         $email = new \Email('your.mom@performics.com');
         $instance->queryToEmail($query, $formatter, $email);
+        $this->assertEquals(
+            count(APITestData::$TEST_ITERATIVE_QUERY_RESPONSE_ROWS_2) +
+            count(APITestData::$TEST_ITERATIVE_QUERY_RESPONSE_ROWS_3),
+            $instance->getLastFetchedRowCount()
+        );
         $this->assertEquals(
             $query->getEmailSubject(), $email->getSubject()
         );
@@ -1505,7 +1548,7 @@ EOF;
         $query3 = new DateRangeGaDataQuery();
         // This needs a total of two iterations
         $query3->setSummaryStartDate('2015-06-01');
-        $query3->setSummaryEndDate('2015-06-15');
+        $query3->setSummaryEndDate('2015-06-14');
         $query3->setIterationInterval(new \DateInterval('P1W'));
         $query3->setProfile(new ProfileSummary(array(
             'id' => 'ga:12345',
@@ -1523,6 +1566,13 @@ EOF;
         // Send it to a file too, just for testing purposes
         $tempFile = tempnam(GOOGLE_ANALYTICS_API_DATA_DIR, 'G');
         $instance->queryToEmail($collection, $formatter, $email, $tempFile);
+        /* The last query in the collection pulled two pages of data on its
+        final iteration. */
+        $this->assertEquals(
+            count(APITestData::$TEST_ITERATIVE_QUERY_RESPONSE_ROWS_2) +
+            count(APITestData::$TEST_ITERATIVE_QUERY_RESPONSE_ROWS_3),
+            $instance->getLastFetchedRowCount()
+        );
         $fh = fopen('php://memory', 'r+');
         fwrite($fh, 'Report 1 of 3' . PHP_EOL);
         fputcsv($fh, array('Description:', 'Basic query'));
@@ -1557,7 +1607,7 @@ EOF;
         fputcsv($fh, array('Description:', 'An iterative query'));
         fputcsv($fh, array('Profile:', 'security Blog 3'));
         fputcsv($fh, array('Start date:', '2015-06-01'));
-        fputcsv($fh, array('End date:', '2015-06-15'));
+        fputcsv($fh, array('End date:', '2015-06-14'));
         fwrite($fh, PHP_EOL);
         // Have to worry about the iterative name with this one
         $columns = self::_getColumnNamesFromRawData(

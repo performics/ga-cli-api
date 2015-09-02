@@ -643,17 +643,17 @@ EOF;
      * .ini file to the file whose name is provided. Handles arrays, but they
      * are assumed to be numerically-indexed (i.e. key information is
      * discarded). Throws a RuntimeException if it was not possible to write to
-	 * the specified file.
+     * the specified file.
      *
      * @param array $settings
      * @param string $fileName
      * @param boolean $append
      */
     public static function writeINIFile(
-		array $settings,
-		$fileName,
-		$append = false
-	) {
+        array $settings,
+        $fileName,
+        $append = false
+    ) {
         if ($append) {
             $fileHandle = fopen($fileName, 'ab');
         }
@@ -662,8 +662,8 @@ EOF;
         }
         if (!$fileHandle) {
             throw new RuntimeException(
-				'Unable to open ' . $fileName . ' for writing.'
-			);
+                'Unable to open ' . $fileName . ' for writing.'
+            );
         }
         foreach ($settings as $key => $val) {
             if (is_array($val)) {
@@ -846,13 +846,13 @@ EOF;
         $detectHelp = true
     ) {
         /* Corresponding indexes in $shortArgs and $longArgs will be treated as
-		denoting alternate forms of the same argument (provided that both have
-		a length), and the argument's value will be placed into the returned
-		array under the key corresponding to the long form of the argument.
-		Obviously, no such normalization takes place with an argument that only
-		has one form. */
-		$shortCount = count($shortArgs);
-		$longCount = $longArgs ? count($longArgs) : 0;
+        denoting alternate forms of the same argument (provided that both have
+        a length), and the argument's value will be placed into the returned
+        array under the key corresponding to the long form of the argument.
+        Obviously, no such normalization takes place with an argument that only
+        has one form. */
+        $shortCount = count($shortArgs);
+        $longCount = $longArgs ? count($longArgs) : 0;
         $mandatoryArgs = array();
         $passableShortArgs = array();
         $passableLongArgs = array();
@@ -868,9 +868,9 @@ EOF;
             }
             $passableLongArgs[] = $longArgs[$i];
             $longArgs[$i] = rtrim($longArgs[$i], ':');
-			/* No need to put the long forms in the map; we only need to add
-			the forms that should map to something different, which will only
-			be the short forms. */
+            /* No need to put the long forms in the map; we only need to add
+            the forms that should map to something different, which will only
+            be the short forms. */
             if ($mandatory) {
                 $mandatoryArgs[] = $longArgs[$i];
             }
@@ -886,15 +886,15 @@ EOF;
             }
             $passableShortArgs[] = $shortArgs[$i];
             $cleanArg = rtrim($shortArgs[$i], ':');
-			if (isset($longArgs[$i]) && strlen($longArgs[$i])) {
-				$canonicalArgMap[$cleanArg] = $longArgs[$i];
-			}
+            if (isset($longArgs[$i]) && strlen($longArgs[$i])) {
+                $canonicalArgMap[$cleanArg] = $longArgs[$i];
+            }
             if ($mandatory) {
                 $canonicalArg = isset($canonicalArgMap[$cleanArg]) ?
-					$canonicalArgMap[$cleanArg] : $cleanArg;
-				if (!in_array($canonicalArg, $mandatoryArgs)) {
-					$mandatoryArgs[] = $canonicalArg;
-				}
+                    $canonicalArgMap[$cleanArg] : $cleanArg;
+                if (!in_array($canonicalArg, $mandatoryArgs)) {
+                    $mandatoryArgs[] = $canonicalArg;
+                }
             }
         }
         $rawArgs = getopt(
@@ -905,28 +905,28 @@ EOF;
                 'Encountered error while parsing command-line arguments.'
             );
         }
-		$processedArgs = array();
-		foreach ($rawArgs as $argKey => $argVal) {
-			$canonicalKey = isset($canonicalArgMap[$argKey]) ?
-				$canonicalArgMap[$argKey] : $argKey;
-			/* For some reason getopt() uses a boolean false as the option
+        $processedArgs = array();
+        foreach ($rawArgs as $argKey => $argVal) {
+            $canonicalKey = isset($canonicalArgMap[$argKey]) ?
+                $canonicalArgMap[$argKey] : $argKey;
+            /* For some reason getopt() uses a boolean false as the option
             value if no argument was passed; to me boolean true makes more
             sense. */
-			if ($argVal === false) {
-				$argVal = true;
-			}
-			if (isset($processedArgs[$canonicalKey])) {
-				if (!is_array($processedArgs[$canonicalKey])) {
-					$processedArgs[$canonicalKey] = array(
-						$processedArgs[$canonicalKey]
-					);
-				}
-				$processedArgs[$canonicalKey][] = $argVal;
-			}
-			else {
-				$processedArgs[$canonicalKey] = $argVal;
-			}
-		}
+            if ($argVal === false) {
+                $argVal = true;
+            }
+            if (isset($processedArgs[$canonicalKey])) {
+                if (!is_array($processedArgs[$canonicalKey])) {
+                    $processedArgs[$canonicalKey] = array(
+                        $processedArgs[$canonicalKey]
+                    );
+                }
+                $processedArgs[$canonicalKey][] = $argVal;
+            }
+            else {
+                $processedArgs[$canonicalKey] = $argVal;
+            }
+        }
         if ($detectHelp && isset($processedArgs['help']) &&
             defined('PFX_USAGE_MESSAGE'))
         {
@@ -1221,13 +1221,13 @@ EOF;
                 );
             }
             if ($subExt) {
-				/* This is relying on the possibly brittle assumption that if
-				the file returned by the tempnam() call didn't overwrite
-				anything in that directory, we also won't be overwriting an
-				existing file by adding this extension. */
-				$newInflated = $inflated . '.' . $subExt;
+                /* This is relying on the possibly brittle assumption that if
+                the file returned by the tempnam() call didn't overwrite
+                anything in that directory, we also won't be overwriting an
+                existing file by adding this extension. */
+                $newInflated = $inflated . '.' . $subExt;
                 rename($inflated, $newInflated);
-				$inflated = $newInflated;
+                $inflated = $newInflated;
             }
             // Get the uncompressed size
             $zHandle = fopen($file, 'rb');
@@ -1294,10 +1294,10 @@ EOF;
             $ext = pathinfo(zip_entry_name($lastEntry), PATHINFO_EXTENSION);
             if ($ext) {
                 /* See the note in the corresponding section of the gzip
-				branch re: the possible brittleness of this assumption. */
-				$newInflated = $inflated . '.' . $ext;
+                branch re: the possible brittleness of this assumption. */
+                $newInflated = $inflated . '.' . $ext;
                 rename($inflated, $newInflated);
-				$inflated = $newInflated;
+                $inflated = $newInflated;
             }
             $handle = fopen($inflated, 'wb');
             if (!$handle) {
@@ -1323,15 +1323,15 @@ EOF;
      * containing the matching value. The matching logic depends on the value
      * of the fifth argument:
      * PFXUtils::ARRAY_SEARCH_STRICTMATCH: looks for an exact match against the
-	 * search argument (taking type into account)
+     * search argument (taking type into account)
      * PFXUtils::ARRAY_SEARCH_NEXTLOWEST: first tries finding an exact match,
-	 * and if that is not possible, returns an index such that the value there
-	 * is lesser than the comparison value, but the next highest index contains
-	 * a greater value
+     * and if that is not possible, returns an index such that the value there
+     * is lesser than the comparison value, but the next highest index contains
+     * a greater value
      * PFXUtils::ARRAY_SEARCH_NEXTHIGHEST: first tries finding an exact match,
-	 * and if that is not possible, returns an index such that the value there
-	 * is greater than the comparison value, but the next lowest index contains
-	 * a lesser value
+     * and if that is not possible, returns an index such that the value there
+     * is greater than the comparison value, but the next lowest index contains
+     * a lesser value
      * This method assumes that the argument array has already been sorted
      * (ascending). If the sixth argument is provided, it should be a callback
      * that extracts a comparison value from whatever is stored under an array
@@ -1400,14 +1400,14 @@ EOF;
         $nextHighestValue = null;
         $nextLowestIndex = null;
         $nextLowestValue = null;
-		// This is true no matter what the search type is
-		if ($valAtIndex === $val) {
-			return $mid;
-		}
+        // This is true no matter what the search type is
+        if ($valAtIndex === $val) {
+            return $mid;
+        }
         /* This block does the double duty of testing whether the midpoint
         index we picked out is the one we want and ensuring that the search
         type is valid. */
-		if ($searchType == self::ARRAY_SEARCH_NEXTLOWEST) {
+        if ($searchType == self::ARRAY_SEARCH_NEXTLOWEST) {
             $next = $mid + 1;
             if (array_key_exists($next, $arr)) {
                 $nextHighestIndex = $next;
@@ -1422,7 +1422,7 @@ EOF;
             }
         }
         elseif ($searchType == self::ARRAY_SEARCH_NEXTHIGHEST) {
-			$next = $mid - 1;
+            $next = $mid - 1;
             if (array_key_exists($next, $arr)) {
                 $nextLowestIndex = $next;
                 $nextLowestValue = self::_getValueAtArrayIndex(
@@ -1547,8 +1547,8 @@ EOF;
     /**
      * Attempts to guess the character encoding of a file stream based on its
      * BOM, if it has one. Note that this method will move the file handle's
-	 * position back to the beginning if it is not already there, and it will
-	 * move the position to the next byte beyond the BOM.
+     * position back to the beginning if it is not already there, and it will
+     * move the position to the next byte beyond the BOM.
      *
      * @param resource $fh
      * @return string
@@ -1599,7 +1599,7 @@ EOF;
      */
     public static function guessEOL($fh) {
         $returnPos = ftell($fh);
-		rewind($fh);
+        rewind($fh);
         $lastChar = null;
         while (!feof($fh)) {
             $thisChar = fgetc($fh);
@@ -1610,10 +1610,10 @@ EOF;
                 }
                 return "\n";
             }
-			elseif ($lastChar == "\r") {
-				fseek($fh, $returnPos, SEEK_SET);
-				return "\r";
-			}
+            elseif ($lastChar == "\r") {
+                fseek($fh, $returnPos, SEEK_SET);
+                return "\r";
+            }
             // Skip null bytes when setting last character
             if ($thisChar !== "\000") {
                 $lastChar = $thisChar;
@@ -1662,7 +1662,7 @@ EOF;
         back to the native fgets(). */
         if ($sourceEncoding !== null && $sourceEncoding == $destEncoding &&
             substr($eol, -1) == "\n")
-		{
+        {
             return fgets($fh);
         }
         /* When we look for EOL characters in the data, we need to look for

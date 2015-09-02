@@ -2,7 +2,7 @@
 namespace Google\Analytics;
 require_once(__DIR__ . DIRECTORY_SEPARATOR . 'Exception.class.php');
 
-class GaDataRowCollection {
+class GaDataRowCollection implements \Countable {
 	/* The presence of this flag instructs $this->fetch() to typecast
 	everything that looks like a number as a number (either an integer or a
 	float). */
@@ -96,6 +96,10 @@ class GaDataRowCollection {
 	 */
 	public function reset() {
 		$this->_rowPointer = 0;
+	}
+	
+	public function count() {
+		return $this->_rowCount;
 	}
 }
 ?>

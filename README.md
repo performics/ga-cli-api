@@ -9,6 +9,7 @@ This application requires PHP 5.3.29 or higher. The following extensions are req
 * PCRE
 * libxml
 * cURL
+* openssl
 * PDO-MySQL (if a database is used)
 
 Access to a MySQL database (version 5.0 or higher) is recommended but not required. Although the documentation assumes that the application will be installed in a Unix-like environment, it is theoretically possible (although untested) to run it in a Windows environment.
