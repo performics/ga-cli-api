@@ -14,8 +14,6 @@ abstract class Base {
 	considerations. */
 	//const RESPONSE_FORMAT_PHP = 2;
 	const RESPONSE_FORMAT_XML = 3;
-	const TRANSFER_METHOD_GET = 1;
-	const TRANSFER_METHOD_POST = 2;
 	protected static $_sslCerts = array(); // keyed on host portion of the URL
 	private static $_SETTINGS = array(
 		'API_VERBOSE_REQUESTS' => false,
@@ -44,9 +42,8 @@ abstract class Base {
 	private $_parseCallback;
 	private $_parseCallbackArgs = array();
 	private $_lastRequestTimeVarName;
-	private $_instanceType;
 	private $_instanceSetupComplete = false;
-	private $_requestBound = false;
+	private $_requestBound;
 	private $_curlHandle;
 	private $_curlOptions;
 	private $_attemptCount;
@@ -62,21 +59,13 @@ abstract class Base {
 	protected $_repeatPauseInterval = 2;
 	// Milliseconds to wait between making two different calls to the same API
 	protected $_requestDelayInterval;
-	protected $_httpUser;
-	protected $_httpPass;
 	protected $_httpResponseActionMap = array();
 	protected $_responseFormat;
-	protected $_transferMethod = self::TRANSFER_METHOD_GET;
-	protected $_requestURL;
-	/* Any parameters that should be present in every request made by this
-	instance may be placed in this array. */
-	protected $_persistentParams = array();
-	protected $_postData;
+	protected $_request;
 	protected $_responseRaw;
 	protected $_responseParsed;
 	protected $_responseCode;
 	protected $_responseHeader;
-	protected $_autoRedirect = true;
 	/* This controls what gets written to the transfer file (if the child class
 	defines one) to separate entries. */
 	protected $_transferEOL = "\n";
@@ -397,22 +386,16 @@ abstract class Base {
 		$this->_responseRaw = null;
 		$this->_responseParsed = null;
 		$this->_responseCode = null;
-		$this->_requestBound = false;
 		$this->_attemptCount = 0;
 		$this->_responseHeader = '';
 		$this->_curlOptions = array();
 		$this->_curlHandle = curl_init();
+		$this->_request = null;
+		$this->_requestBound = false;
 		$opts = array(
 			CURLOPT_RETURNTRANSFER => true,
 			CURLOPT_HEADERFUNCTION => array($this, '_setHeader')
 		);
-		if ($this->_autoRedirect) {
-			$opts[CURLOPT_FOLLOWLOCATION] = true;
-			$opts[CURLOPT_MAXREDIRS] = 10;
-		}
-		if ($this->_httpUser && $this->_httpPass) {
-			$opts[CURLOPT_USERPWD] = $this->_httpUser . ':' . $this->_httpPass;
-		}
 		$this->_setCurlOption($opts);
 	}
 	
@@ -437,53 +420,48 @@ abstract class Base {
 	}
 	
 	/**
-	 * Binds the characteristics of the URL to a cURL session, which is
-	 * something that may need to be redone within the loop that gets the API
-	 * response in $this->_getResponse().
-	 *
-	 * @param resource $ch
+	 * Binds the characteristics of the request to the cURL session.
 	 */
-	private function _bindRequestToCurlHandle($ch) {
+	private function _bindRequestToCurlHandle() {
 		if (API_VERBOSE_REQUESTS) {
-			echo 'Request URL is ' . $this->_requestURL->getURL() . PHP_EOL;
+			echo 'Request URL is ' . $this->_request->getURL() . PHP_EOL;
 		}
-		$this->_setCurlOption(CURLOPT_URL, $this->_requestURL->getURL());
-		if ($this->_postData) {
-			if (API_VERBOSE_REQUESTS) {
-				echo 'POST data is as follows: ';
-				if (is_array($this->_postData)) {
-					echo '(' . PHP_EOL;
-					foreach ($this->_postData as $key => $val) {
-						$len = strlen($val);
-						if ($len > 160) {
-							$val = substr($val, 0, 133) . '...(' . ($len - 133)
-								 . ' byte(s) truncated)';
-						}
-						echo "\t" . $key . ': ' . $val . PHP_EOL;
+		$this->_setCurlOption($this->_request->getCurlOptions());
+		if (API_VERBOSE_REQUESTS && $this->_request->getVerb() == 'POST') {
+			echo 'POST data is as follows: ';
+			$postData = $this->_request->getPostParameters();
+			if (is_array($postData)) {
+				echo '(' . PHP_EOL;
+				foreach ($postData as $key => $val) {
+					$len = strlen($val);
+					if ($len > 160) {
+						$val = substr($val, 0, 133) . '...(' . ($len - 133)
+							 . ' byte(s) truncated)';
 					}
-					echo ')';
+					echo "\t" . $key . ': ' . $val . PHP_EOL;
+				}
+				echo ')';
+			}
+			else {
+				$len = strlen($postData);
+				if ($len > 160) {
+					echo substr($postData, 0, 133) . '...('
+					   . ($len - 133) . ' byte(s) truncated)';
 				}
 				else {
-					$len = strlen($this->_postData);
-					if ($len > 160) {
-						echo substr($this->_postData, 0, 133) . '...('
-						   . ($len - 133) . ' byte(s) truncated)';
-					}
-					else {
-						echo $this->_postData;
-					}
+					echo $postData;
 				}
-				echo PHP_EOL;
 			}
-			$this->_setCurlOption(CURLOPT_POSTFIELDS, $this->_postData);
+			echo PHP_EOL;
 		}
-		if ($this->_requestURL->getScheme() == 'https') {
+		$url = $this->_request->getURL();
+		if ($url->getScheme() == 'https') {
 			/* See whether a specific CA bundle has been registered for us to
 			use, starting by checking for the specific host, then the wildcard.
 			Otherwise just let cURL do what it would by default, which may or
 			may not work depending on the environment. */
 			// First try specific host, then try wildcard
-			$host = $this->_requestURL->getHost();
+			$host = $url->getHost();
 			$certFile = null;
 			if (array_key_exists($host, self::$_sslCerts)) {
 				$certFile = self::$_sslCerts[$host];
@@ -532,88 +510,19 @@ abstract class Base {
 	}
 	
 	/**
-	 * Build a typical API request URL, assumed to consist of a URI base plus
-	 * some number of key-value pairs to be encoded in a query string (provided
-	 * here in an associative array). This method will URL-encode the key-value
-	 * pairs. Note that in the case of an invalid URL being generated, this
-	 * method will return false rather than setting the $this->_requestURL
-	 * property.
+	 * Performs a request, which may involve more than one call (e.g. if there
+	 * is a redirect involved or the request fails on the first attempt and is
+	 * subsequently retried). This method returns false if the HTTP status code
+	 * of the final call was anything other than 200, unless it was handled by
+	 * mapping an HTTP status to an action.
 	 *
-	 * It's an awful design to make subclasses call this and then call
-	 * $this->_getResponse(). Someday I will refactor these into a single call.
-	 *
-	 * @param string $baseURI
-	 * @param array $requestParams = null
-	 * @param string $argSeparator = '&'
-	 */
-	protected function _buildRequestURL(
-		$baseURI,
-		array $requestParams = null,
-		$argSeparator = '&'
-	) {
-		if (!$this->_instanceSetupComplete) {
-			$this->_setupInstance();
-		}
-		// Merge request params and persistent params, preferring the former
-		if ($requestParams !== null) {
-			$requestParams = array_merge(
-				$this->_persistentParams, $requestParams
-			);
-		}
-		elseif ($this->_persistentParams) {
-			$requestParams = $this->_persistentParams;
-		}
-		try {
-			$this->_requestURL = new \URL($baseURI);
-			if ($this->_transferMethod == self::TRANSFER_METHOD_POST) {
-				$this->_postData = $requestParams;
-			}
-			else {
-				$this->_requestURL->setQSArgSeparator($argSeparator);
-				$this->_requestURL->setQueryString($requestParams);
-			}
-		} catch (\URLException $e) {
-			throw new $this->_EXCEPTION_TYPE(
-				'Caught error while building request URL.', null, $e
-			);
-		}
-		$this->_requestBound = false;
-	}
-	
-	/**
-	 * Create a cURL session and retrieve the result data. Note that this
-	 * method does not define behavior for what happens when the API fails to
-	 * return a response, so the caller should be prepared to handle that. If
-	 * the second argument is provided, CURLOPT_POST will be set to true and
-	 * the submitted value will be used in CURLOPT_POSTFIELDS, but this
-	 * parameter may not be used if $this->_transferMethod is already set to
-	 * POST. The third argument, if passed, should be a numerically-indexed
-	 * array of HTTP request headers (in the format Header-Name: Header-Value);
-	 * these will be passed directly to curl_setopt(). The fourth argument may
-	 * be used to specify an HTTP verb other than GET or POST. This method
-	 * returns false if the HTTP status code of the final call was anything
-	 * other than 200, unless it was handled by mapping an HTTP status to an
-	 * action.
-	 *
+	 * @param GenericAPI\Request $request
 	 * @param boolean $parse = true
-	 * @param string, array $postData = null
-	 * @param array $requestHeaders = null
-	 * @param string $customVerb = null
 	 * @return boolean
 	 */
-	protected function _getResponse(
-		$parse = true,
-		$postData = null,
-		array $requestHeaders = null,
-		$customVerb = null
-	) {
+	protected function _getResponse(Request $request, $parse = true) {
 		if (!$this->_instanceSetupComplete) {
 			$this->_setupInstance();
-		}
-		if (!$this->_requestURL) {
-			throw new $this->_EXCEPTION_TYPE(
-				'No request URL has been built yet.'
-			);
 		}
 		if ($this->_requestDelayInterval) {
 			$this->_mutex->acquire();
@@ -626,40 +535,7 @@ abstract class Base {
 			$this->_mutex->release();
 		}
 		$this->_resetState();
-		/* In this scope we can set options that won't be modified in the
-		process of connecting to the web service. We'll bind options related
-		to the URL itself during the loop that attempts to contact the service,
-		as the URL could potentially be modified as we go. */
-		if ($requestHeaders) {
-			$this->_setCurlOption(CURLOPT_HTTPHEADER, $requestHeaders);
-		}
-		if ($customVerb) {
-			$this->_setCurlOption(CURLOPT_CUSTOMREQUEST, $customVerb);
-			/* If we normally do POSTs from this instance and there were
-			parameters passed with the URL, they will be set up to use as POST
-			fields rather than query string parameters, which isn't what we
-			want in this case. Again, this is a design flaw arising from using
-			separate steps to prepare the URL and make the request, and I
-			intend to do away with this someday. */
-			if ($this->_transferMethod == self::TRANSFER_METHOD_POST &&
-			    $this->_postData)
-			{
-				$this->_requestURL->setQueryString($this->_postData);
-				$this->_postData = null;
-			}
-		}
-		elseif ($this->_transferMethod == self::TRANSFER_METHOD_POST || $postData)
-		{
-			$this->_setCurlOption(CURLOPT_POST, true);
-			if ($postData) {
-				if ($this->_postData) {
-					throw new $this->_EXCEPTION_TYPE(
-						'Cannot mix sources of POST data.'
-					);
-				}
-				$this->_postData = $postData;
-			}
-		}
+		$this->_request = $request;
 		for ($i = 0; $i < $this->_responseTries; $i++) {
 			/* This needs to be reinitialized on each loop iteration, or else
 			we will end up returning false when the first attempt fails but a
@@ -673,7 +549,7 @@ abstract class Base {
 				   . $this->_responseTries . '...' . PHP_EOL;
 			}
 			if (!$this->_requestBound) {
-				$this->_bindRequestToCurlHandle($this->_curlHandle);
+				$this->_bindRequestToCurlHandle();
 			}
 			$response = $this->_executeCurlHandle();
 			/* I didn't used to set the raw response property until this loop
@@ -705,9 +581,9 @@ abstract class Base {
 			if ($action == self::ACTION_URL_MOVED) {
 				/* This condition throws an exception so it's easier to know
 				that URLs in library code need to be updated. Note that this
-				only takes effect if the $this->_autoRedirect property is set
-				to false (which is not its default) or if the number of
-				redirects emitted by the remote service exceeds 10. */
+				only takes effect if the request is not set to redirect
+				automatically or if the number of redirects emitted by the
+				remote service exceeds 10. */
 				$headers = $this->getResponseHeaderAsAssociativeArray();
 				if (isset($headers['Location'])) {
 					$message = 'The remote service reports that this resource '
@@ -726,8 +602,6 @@ abstract class Base {
 			}
 			sleep($this->_repeatPauseInterval);
 		}
-		// Clear out any POST data we may have been working with
-		$this->_postData = null;
 		/* In order for certain things to work properly (e.g. the storing of
 		raw SERP source code from the SEMRush API), we need to parse the
 		response before we store the raw response. However, if for some reason
@@ -891,10 +765,10 @@ abstract class Base {
 	}
 	
 	/**
-	 * @return URL
+	 * @return GenericAPI\Request
 	 */
-	public function getRequestURL() {
-		return $this->_requestURL;
+	public function getRequest() {
+		return $this->_request;
 	}
 	
 	/**

@@ -10,18 +10,21 @@ class FakeOAuthService implements \OAuth\IService {
 }
 
 class TestAPI extends ServiceAccountAPI {
-    /* This subclass of the real class we're testing provides public hooks for
+	/* This subclass of the real class we're testing provides public hooks for
     the mocking of certain methods. */
+	
+    protected static function _configureOAuthService() {
+		if (!TestAPIRequest::hasOAuthService()) {
+			TestAPIRequest::registerOAuthService(new FakeOAuthService());
+		}
+	}
+	
     protected function _executeCurlHandle() {
         return $this->executeCurlHandle();
     }
     
     protected function _getLastHTTPResponse() {
         return $this->getLastHTTPResponse();
-    }
-    
-    protected function _getOAuthService() {
-        return new FakeOAuthService();
     }
     
     /* Prevent things from blowing up because my test objects don't have class
@@ -39,30 +42,23 @@ class TestAPI extends ServiceAccountAPI {
     }
     
     /**
-     * @param string, URL $baseURL
-	 * @param array $params = null
+     * @param Google\ServiceAccountAPIRequest $request
      */
-    public function prepareRequest($baseURL, array $params = null) {
-        $this->_prepareRequest($baseURL, $params);
+    public function prepareRequest(ServiceAccountAPIRequest $request) {
+        $this->_prepareRequest($request);
     }
     
     /**
-     * @param string $baseURL = null
-	 * @param array $params = null
-	 * @param array $postData = null
-	 * @param array $extraHeaders = null
-     * @return array
+     * @param Google\ServiceAccountAPIRequest $request = null
+     * @return mixed
      */
-    public function makeRequest(
-		$baseURL = null,
-        array $params = null,
-		array $postData = null,
-		array $extraHeaders = null
-	) {
-        return $this->_makeRequest(
-            $baseURL, $params, $postData, $extraHeaders
-        );
+    public function makeRequest(ServiceAccountAPIRequest $request = null) {
+		return $this->_makeRequest($request);
     }
+}
+
+class TestAPIRequest extends ServiceAccountAPIRequest {
+	protected static $_oauthService;
 }
 
 class ServiceAccountAPITestCase extends \TestHelpers\TestCase {
@@ -98,7 +94,7 @@ EOF;
         $instance = $this->_getStub(array(
             'executeCurlHandle' => $this->returnValue($response)
         ));
-        $instance->makeRequest('http://foo.bar/api');
+        $instance->makeRequest(new TestAPIRequest('http://foo.bar/api'));
         $curlOpts = $instance->getCurlOptions();
         $authHeader = 'Authorization: Bearer ' . TEST_OAUTH_TOKEN;
         $this->assertContains($authHeader, $curlOpts[CURLOPT_HTTPHEADER]);
@@ -106,53 +102,14 @@ EOF;
             'Dingus: Drungle',
             'Captain: Beefheart'
         );
-        $instance->makeRequest(
-            'http://foo.bar/api', null, null, $extraHeaders
-        );
+		$request = new TestAPIRequest('http://foo.bar/api');
+		$request->setHeader($extraHeaders);
+        $instance->makeRequest($request);
         $curlOpts = $instance->getCurlOptions();
         $this->assertContains($authHeader, $curlOpts[CURLOPT_HTTPHEADER]);
         foreach ($extraHeaders as $header) {
             $this->assertContains($header, $curlOpts[CURLOPT_HTTPHEADER]);
         }
-    }
-    
-    /**
-     * Tests that query string parameters make it to the URL that is used in
-     * the request.
-     */
-    public function testQueryStringParams() {
-        $response = <<<EOF
-{
-    "foo": "bar"
-}
-EOF;
-        $instance = $this->_getStub(array(
-            'executeCurlHandle' => $this->returnValue($response)
-        ));
-        $params = array(
-            'foo' => 'bar',
-            'bar' => 'baz'
-        );
-        $instance->makeRequest('http://foo.bar/api', $params);
-        $this->assertEquals(
-            $params, $instance->getRequestURL()->getQueryStringData()
-        );
-        // This should still happen if we pass data to be POSTed
-        $params = array(
-            'a' => 1,
-            'b' => 2,
-            'c' => 3
-        );
-        $postData = array(
-            'favorite_actor' => 'dennehy',
-            'favorite_drink' => "o'douls",
-            'bears' => 'hawks',
-            'sox' => 'bulls'
-        );
-        $instance->makeRequest('http://foo.bar/api', $params, $postData);
-        $this->assertEquals(
-            $params, $instance->getRequestURL()->getQueryStringData()
-        );
     }
     
     /**
@@ -187,16 +144,17 @@ EOF;
         ));
         $iteration = 0;
         $expectedIterations = 4;
-        $instance->prepareRequest('http://foo.bar/api');
+        $instance->prepareRequest(new TestAPIRequest('http://foo.bar/api'));
         while ($response = $instance->makeRequest()) {
             if ($iteration > 0) {
-                $this->assertTrue($instance->getRequestURL()->compare(
+                $this->assertTrue($instance->getRequest()->getURL()->compare(
                     $data[$iteration - 1]['nextLink']
                 ));
             }
             else {
                 $this->assertEquals(
-                    'http://foo.bar/api', (string)$instance->getRequestURL()
+                    'http://foo.bar/api',
+					(string)$instance->getRequest()->getURL()
                 );
             }
             $this->assertEquals($data[$iteration++], $response);
@@ -214,7 +172,33 @@ EOF;
 		$instance = $this->_getStub(array(
 			'getLastHTTPResponse' => $this->returnValue(400)
 		));
-		$instance->makeRequest('http://foo.bar/api');
+		$instance->makeRequest(new TestAPIRequest('http://foo.bar/api'));
+	}
+	
+	/**
+	 * Confirms that OAuth headers are included once and only once, even if
+	 * they are explicitly passed.
+	 */
+	public function testAuthHeader() {
+		$testCallback = function(array $headers) {
+			$authHeaderCount = 0;
+			foreach ($headers as $header) {
+				if (strpos(strtolower($header), 'authorization:') !== false) {
+					$authHeaderCount++;
+				}
+			}
+			return $authHeaderCount;
+		};
+		$request = new TestAPIRequest('http://foo.bar');
+		$this->assertEquals(1, $testCallback($request->getHeaders()));
+		$request->setHeader('Foo: bar');
+		$this->assertEquals(1, $testCallback($request->getHeaders()));
+		$request->setHeader('Authorization: foo');
+		$this->assertEquals(1, $testCallback($request->getHeaders()));
+		$request->setHeader(' authorization: bar');
+		$this->assertEquals(1, $testCallback($request->getHeaders()));
+		$request->replaceHeader('authorization', 'baz');
+		$this->assertEquals(1, $testCallback($request->getHeaders()));
 	}
 }
 ?>

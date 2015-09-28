@@ -3,7 +3,6 @@ namespace Google\Analytics;
 require_once(__DIR__ . DIRECTORY_SEPARATOR . 'Exception.class.php');
 
 class API extends \Google\ServiceAccountAPI {
-    const URL_BASE = 'https://www.googleapis.com/analytics/v3/';
     const FAILURE_CODE_SAMPLING = 1;
     private static $_SETTINGS = array(
         'GOOGLE_ANALYTICS_API_AUTH_SCOPE' => 'https://www.googleapis.com/auth/analytics.readonly',
@@ -83,7 +82,10 @@ class API extends \Google\ServiceAccountAPI {
                 GOOGLE_ANALYTICS_API_LOG_EMAIL,
                 $this->_mutex
             );
-            \LoggingExceptions\Exception::registerLogger($this->_logger);
+            // It's only necessary to register a logger once
+            if (!\LoggingExceptions\Exception::hasLogger()) {
+                \LoggingExceptions\Exception::registerLogger($this->_logger);
+            }
             $this->_EXCEPTION_TYPE = __NAMESPACE__ . '\RuntimeException';
         } catch (\Exception $e) {
             if ($e instanceof Exception) {
@@ -102,6 +104,9 @@ class API extends \Google\ServiceAccountAPI {
                 OAUTH_DB_DSN, OAUTH_DB_USER, OAUTH_DB_PASSWORD
             );
             self::_prepareDBStatements();
+        }
+        if (PFX_CA_BUNDLE) {
+            self::_registerSSLCertificate(PFX_CA_BUNDLE);
         }
         self::$_staticPropsReady = true;
     }
@@ -309,6 +314,25 @@ EOF;
                 );
         }
     }
+     
+    protected static function _configureOAuthService() {
+        if (APIRequest::hasOAuthService()) {
+            return;
+        }
+        $authModule = new \OAuth\UserlessAuthorizationModule(
+            new \OAuth\JSONTokenResponseParser(),
+            new \OAuth\GoogleJWTRequestBuilder(
+                GOOGLE_ANALYTICS_API_AUTH_EMAIL,
+                GOOGLE_ANALYTICS_API_AUTH_TARGET,
+                GOOGLE_ANALYTICS_API_AUTH_SCOPE,
+                GOOGLE_ANALYTICS_API_AUTH_KEYFILE,
+                GOOGLE_ANALYTICS_API_AUTH_KEYFILE_PASSWORD
+            ),
+            GOOGLE_ANALYTICS_API_AUTH_TARGET
+        );
+        $authModule->usePostToAuthorize();
+        APIRequest::registerOAuthService(new \OAuth\Service($authModule));
+    }
     
     /**
      * Returns an object from the given property reference using the given name,
@@ -377,16 +401,11 @@ EOF;
                     $fetchDate <= time() - GOOGLE_ANALYTICS_API_METADATA_CACHE_DURATION)
                 {
                     $this->_bypassColumnCache = false;
-                    $extraHeaders = array();
+                    $request = new APIRequest('metadata/ga/columns');
                     if ($etag) {
-                        $extraHeaders[] = 'If-None-Match: ' . $etag;
+                        $request->setHeader('If-None-Match: ' . $etag);
                     }
-                    $columns = $this->_makeRequest(
-                        self::URL_BASE . 'metadata/ga/columns',
-                        null,
-                        null,
-                        $extraHeaders
-                    );
+                    $columns = $this->_makeRequest($request);
                     if ($columns) {
                         $stmt = self::$_DB_STATEMENTS[
                             'google_analytics_api_columns'
@@ -585,9 +604,9 @@ EOF;
             }
         }
         else {
-            $columns = $this->_makeRequest(
-                self::URL_BASE . 'metadata/ga/columns'
-            );
+            $columns = $this->_makeRequest(new APIRequest(
+                'metadata/ga/columns'
+            ));
         }
         foreach ($columns as $column) {
             if ($column->getType() == 'DIMENSION') {
@@ -642,9 +661,9 @@ EOF;
                     $visibleAccounts = array();
                     $visibleWebProperties = array();
                     $visibleProfiles = array();
-                    $accounts = $this->_makeRequest(
-                        self::URL_BASE . 'management/accountSummaries'
-                    );
+                    $accounts = $this->_makeRequest(new APIRequest(
+                        'management/accountSummaries'
+                    ));
                     $selectAccount = self::$_DB_STATEMENTS[
                         'google_analytics_api_account_summaries'
                     ]['select'];
@@ -853,9 +872,9 @@ EOF;
             }
         }
         else {
-            $accounts = $this->_makeRequest(
-                self::URL_BASE . 'management/accountSummaries'
-            );
+            $accounts = $this->_makeRequest(new APIRequest(
+                'management/accountSummaries'
+            ));
         }
         foreach ($accounts as $account) {
             self::$_accountsByID[$account->getID()] = $account;
@@ -883,33 +902,6 @@ EOF;
                 }
             }
         }
-    }
-    
-    /**
-     * Returns an instance of the OAuth service through which this instance
-     * will get its authorization tokens.
-     *
-     * @return OAuth\IService
-     */
-    protected function _getOAuthService() {
-        $authModule = new \OAuth\UserlessAuthorizationModule(
-			new \OAuth\JSONTokenResponseParser(),
-            new \OAuth\GoogleJWTRequestBuilder(
-                GOOGLE_ANALYTICS_API_AUTH_EMAIL,
-                GOOGLE_ANALYTICS_API_AUTH_TARGET,
-                GOOGLE_ANALYTICS_API_AUTH_SCOPE,
-                GOOGLE_ANALYTICS_API_AUTH_KEYFILE,
-                GOOGLE_ANALYTICS_API_AUTH_KEYFILE_PASSWORD
-            ),
-            GOOGLE_ANALYTICS_API_AUTH_TARGET
-		);
-		$authModule->usePostToAuthorize();
-        $service = new \OAuth\Service($authModule);
-        // This should be defined by now
-        if (PFX_CA_BUNDLE) {
-			self::_registerSSLCertificate(PFX_CA_BUNDLE);
-		}
-        return $service;
     }
     
     /** 
@@ -1027,7 +1019,7 @@ EOF;
      * @return array
      */
     public function getSegments() {
-        return $this->_makeRequest(self::URL_BASE . 'management/segments');
+        return $this->_makeRequest(new APIRequest('management/segments'));
     }
     
     /**
@@ -1060,9 +1052,9 @@ EOF;
             else {
                 $this->_activeQuery = $hash;
                 $this->_totalRows = 0;
-                $response = $this->_makeRequest(
-                    self::URL_BASE . 'data/ga', $query->getAsArray()
-                );
+                $response = $this->_makeRequest(new APIRequest(
+                    'data/ga', $query->getAsArray()
+                ));
             }
             /* The response will be boolean false if the query had data, but it
             has been exhausted. It will be a Google\Analytics\GaData object

@@ -18,16 +18,19 @@ require_once(__DIR__ . '/../ServiceAccountAPITestCase.class.php');
 class TestAPI extends API {
     /* This subclass of the real class we're testing provides public hooks for
     the mocking of certain methods. */
+    
+    protected static function _configureOAuthService() {
+        if (!APIRequest::hasOAuthService()) {
+            APIRequest::registerOAuthService(new \Google\FakeOAuthService());
+        }
+    }
+    
     protected function _executeCurlHandle() {
         return $this->executeCurlHandle();
     }
     
     protected function _getLastHTTPResponse() {
         return $this->getLastHTTPResponse();
-    }
-    
-    protected function _getOAuthService() {
-        return new \Google\FakeOAuthService();
     }
     
     public function executeCurlHandle() {
@@ -511,7 +514,10 @@ EOF;
     
     /**
      * Tests whether the expected exception is thrown when the API response
-     * content includes an object for which no class definition exists.
+     * content includes an object for which no class definition exists. Note
+     * that because some of these error codes will cause the request to be
+     * automatically retried with a five second delay, this test should be
+     * expected to take some time.
      */
     public function testBadObjectType() {
         /* This will fail because there is no Google\Analytics\AccountSummaries
@@ -1168,7 +1174,9 @@ EOF;
         /* The Google\Analytics\GaData object's "id" is its URL, which should
         have been what was requested. The boilerplate API code probably URL-
         encoded its parameters, though. */
-        $requestURL = new \URL(urldecode((string)$instance->getRequestURL()));
+        $requestURL = new \URL(
+            urldecode((string)$instance->getRequest()->getURL())
+        );
         $this->assertTrue($requestURL->compare($data->getID()));
         /* Now try a paged one. Avoid having this stub empty the caches so we
         don't have to mock the returning of the column data. */
@@ -1210,7 +1218,9 @@ EOF;
             count(APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_1),
             $instance->getLastFetchedRowCount()
         );
-        $requestURL = new \URL(urldecode((string)$instance->getRequestURL()));
+        $requestURL = new \URL(
+            urldecode((string)$instance->getRequest()->getURL())
+        );
         $this->assertTrue($requestURL->compare($data->getID()));
         $expected['getRows'] = new GaDataRowCollection(
             APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_2
@@ -1225,7 +1235,9 @@ EOF;
             count(APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_2),
             $instance->getLastFetchedRowCount()
         );
-        $requestURL = new \URL(urldecode((string)$instance->getRequestURL()));
+        $requestURL = new \URL(
+            urldecode((string)$instance->getRequest()->getURL())
+        );
         $this->assertTrue($requestURL->compare($data->getID()));
         // Might as well test what happens when we write this query to a file
         $formatter = new ReportFormatter();
@@ -1376,7 +1388,7 @@ EOF;
             );
             $this->_runAssertions($expected[$i++], $data);
             $requestURL = new \URL(
-                urldecode((string)$instance->getRequestURL())
+                urldecode((string)$instance->getRequest()->getURL())
             );
             $this->assertTrue($requestURL->compare($data->getID()));
         }
@@ -1405,7 +1417,7 @@ EOF;
             );
             $this->_runAssertions($expected[$i++], $data);
             $requestURL = new \URL(
-                urldecode((string)$instance->getRequestURL())
+                urldecode((string)$instance->getRequest()->getURL())
             );
             $this->assertTrue($requestURL->compare($data->getID()));
         }

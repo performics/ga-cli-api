@@ -3,7 +3,7 @@ namespace GenericAPI;
 
 class MutableAPIInterface extends Base {
     /* This is a concrete implementation of GenericAPI\Base that provides
-    various for functionality for testing purposes. */
+    certain functionality for testing purposes. */
     protected function _executeCurlHandle() {
         return $this->executeCurlHandle();
     }
@@ -65,22 +65,6 @@ class MutableAPIInterface extends Base {
     }
     
     /**
-     * Provides public access to $this->_buildRequestURL() for testing
-     * purposes.
-     *
-     * @param string $baseURI
-     * @param array $requestParams = null
-     * @param string $argSeparator = '&'
-     */
-    public function buildRequestURL(
-        $baseURI,
-        array $requestParams = null,
-        $argSeparator = '&'
-    ) {
-        $this->_buildRequestURL($baseURI, $requestParams, $argSeparator);
-    }
-    
-    /**
      * Provides public access to $this->_registerParseCallback() for testing
      * purposes.
      *
@@ -95,21 +79,12 @@ class MutableAPIInterface extends Base {
     /**
      * Provides public access to $this->_getResponse() for testing purposes.
      *
+     * @param GenericAPI\Request $request
      * @param boolean $parse = true
-     * @param string, array $postData = null
-     * @param array $requestHeaders = null
-     * @param string $customVerb = null
      * @return boolean
      */
-    public function callGetResponse(
-        $parse = true,
-        $postData = null,
-        array $requestHeaders = null,
-        $customVerb = null
-    ) {
-        return $this->_getResponse(
-            $parse, $postData, $requestHeaders, $customVerb
-        );
+    public function callGetResponse(Request $request, $parse = true) {
+        return $this->_getResponse($request, $parse);
     }
     
     /**
@@ -165,8 +140,7 @@ class BaseTestCase extends \TestHelpers\TempFileTestCase {
      */
     public function testHTTPVerb() {
         $instance = $this->_getStub();
-        $instance->buildRequestURL('http://127.0.0.1/');
-        $instance->callGetResponse(false);
+        $instance->callGetResponse(new Request('http://127.0.0.1/'), false);
         /* It's difficult to test this properly. I would like to examine the
         HTTP headers that are actually sent, but I can't think of a way to
         do a dummy HTTP connection, so I am making do by assuming that GET is
@@ -176,57 +150,42 @@ class BaseTestCase extends \TestHelpers\TempFileTestCase {
         $this->assertArrayNotHasKey(CURLOPT_POST, $curlOptions);
         $this->assertArrayNotHasKey(CURLOPT_CUSTOMREQUEST, $curlOptions);
         $this->assertEquals(
-            (string)$instance->getRequestURL(), 'http://127.0.0.1/'
+            (string)$instance->getRequest()->getURL(), 'http://127.0.0.1/'
         );
-        // If we pass explicit POST data, we should do a POST
+        // Setting POST parameters in the request implicitly triggers a POST
         $params = array('foo' => 'bar');
-        $instance->callGetResponse(false, $params);
+        $request = new Request('http://127.0.0.1/');
+        $request->setPostParameters($params);
+        $instance->callGetResponse($request, false);
         $curlOptions = $instance->getCurlOptions();
         $this->assertArrayHasKey(CURLOPT_POST, $curlOptions);
         $this->assertEquals($params, $curlOptions[CURLOPT_POSTFIELDS]);
         $this->assertEquals(
-            'http://127.0.0.1/', (string)$instance->getRequestURL()
+            'http://127.0.0.1/', (string)$instance->getRequest()->getURL()
         );
-        /* If that data is specified as a URL parameter, we normally shouldn't
-        do a POST. */
-        $instance->buildRequestURL('http://127.0.0.1', $params);
-        $instance->callGetResponse(false);
-        $curlOptions = $instance->getCurlOptions();
-        $this->assertArrayNotHasKey(CURLOPT_POST, $curlOptions);
-        $this->assertArrayNotHasKey(CURLOPT_CUSTOMREQUEST, $curlOptions);
-        $this->assertEquals(
-            'http://127.0.0.1/?foo=bar', (string)$instance->getRequestURL()
-        );
-        /* But if the instance is configured to always do a POST, that's
-        another story. */
-        $instance->setProperty('transferMethod', Base::TRANSFER_METHOD_POST);
-        $instance->buildRequestURL('http://127.0.0.1/', $params);
-        $instance->callGetResponse(false);
+        /* Parameters specified in the request constructor shouldn't be used as
+        POST parameters even if the verb is set to POST. */
+        $request = new Request('http://127.0.0.1/', $params);
+        $request->setVerb('POST');
+        $instance->callGetResponse($request, false);
         $curlOptions = $instance->getCurlOptions();
         $this->assertArrayHasKey(CURLOPT_POST, $curlOptions);
-        $this->assertEquals($params, $curlOptions[CURLOPT_POSTFIELDS]);
+        $this->assertArrayNotHasKey(CURLOPT_POSTFIELDS, $curlOptions);
         $this->assertEquals(
-            'http://127.0.0.1/', (string)$instance->getRequestURL()
+            'http://127.0.0.1/?foo=bar',
+            (string)$instance->getRequest()->getURL()
         );
-        // Now try it as a custom verb
-        $instance->buildRequestURL('http://127.0.0.1/', $params);
-        $instance->callGetResponse(false, null, null, 'FROBNICATE');
+        // Now try a custom verb
+        $request = new Request('http://127.0.0.1/', $params);
+        $request->setVerb('FROBNICATE');
+        $instance->callGetResponse($request, false);
         $curlOptions = $instance->getCurlOptions();
         $this->assertArrayNotHasKey(CURLOPT_POST, $curlOptions);
         $this->assertEquals('FROBNICATE', $curlOptions[CURLOPT_CUSTOMREQUEST]);
         $this->assertEquals(
-            'http://127.0.0.1/?foo=bar', (string)$instance->getRequestURL()
+            'http://127.0.0.1/?foo=bar',
+            (string)$instance->getRequest()->getURL()
         );
-        /* Specifying POST data by passing URL parameters while also passing
-        additional POST data when getting the response should throw an
-        exception. */
-        $instance->buildRequestURL('http://127.0.0.1/', $params);
-        try {
-            $instance->callGetResponse(false, array('bar' => 'baz'));
-        } catch (\RuntimeException $e) {
-            return;
-        }
-        $this->fail('Expected a RuntimeException.');
     }
     
     /**
@@ -245,28 +204,30 @@ class BaseTestCase extends \TestHelpers\TempFileTestCase {
         foreach ($fakeCertFiles as $host => $file) {
             $method->invoke(null, $file, $host);
         }
-        $instance->buildRequestURL('http://127.0.0.1/foo/');
-        $instance->callGetResponse(false);
+        $instance->callGetResponse(
+            new Request('http://127.0.0.1/foo/'), false
+        );
         $curlOptions = $instance->getCurlOptions();
         $this->assertArrayNotHasKey(CURLOPT_CAINFO, $curlOptions);
-        $instance->buildRequestURL('https://127.0.0.1/foo/');
-        $instance->callGetResponse(false);
+        $instance->callGetResponse(
+            new Request('https://127.0.0.1/foo/'), false
+        );
         $curlOptions = $instance->getCurlOptions();
         $this->assertEquals(
             $fakeCertFiles['127.0.0.1'], $curlOptions[CURLOPT_CAINFO]
         );
-        $instance->buildRequestURL(
-            'https://127.0.0.2/foo/', array('foo' => 'bar')
+        $instance->callGetResponse(
+            new Request('https://127.0.0.2/foo/', array('foo' => 'bar')),
+            false
         );
-        $instance->callGetResponse(false);
         $curlOptions = $instance->getCurlOptions();
         $this->assertEquals(
             $fakeCertFiles['127.0.0.2'], $curlOptions[CURLOPT_CAINFO]
         );
-        $instance->buildRequestURL(
-            'https://127.0.0.3/foo/', array('foo' => 'bar')
+        $instance->callGetResponse(
+            new Request('https://127.0.0.3/foo/', array('foo' => 'bar')),
+            false
         );
-        $instance->callGetResponse(false);
         $curlOptions = $instance->getCurlOptions();
         $this->assertEquals(
             $fakeCertFiles['*'], $curlOptions[CURLOPT_CAINFO]
@@ -311,15 +272,13 @@ EOF;
             array('responseFormat' => Base::RESPONSE_FORMAT_JSON),
             array('executeCurlHandle' => $this->returnValue($jsonResponse))
         );
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse();
+        $instance->callGetResponse(new Request('http://127.0.0.1'));
         $this->assertEquals($expectedResponse, $instance->getResponse());
         $instance = $this->_getStub(
             array('responseFormat' => Base::RESPONSE_FORMAT_XML),
             array('executeCurlHandle' => $this->returnValue($xmlResponse))
         );
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse();
+        $instance->callGetResponse(new Request('http://127.0.0.1'));
         $this->assertEquals($expectedResponse, $instance->getResponse());
         /* Create a special parsing callback that is based on decoding XML, but
         turns empty strings into nulls (or whatever argument is passed). This
@@ -377,8 +336,7 @@ EOF;
             array('executeCurlHandle' => $this->returnValue($xmlResponse))
         );
         $instance->registerParseCallback($parseCallback);
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse();
+        $instance->callGetResponse(new Request('http://127.0.0.1'));
         $response = $instance->getResponse();
         $this->assertEquals($expectedResponse, $response);
         $this->assertNotSame(
@@ -392,8 +350,7 @@ EOF;
         );
         // Now try it with something other than null as the replacement value
         $instance->registerParseCallback($parseCallback, array('dingus'));
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse();
+        $instance->callGetResponse(new Request('http://127.0.0.1'));
         $response = $instance->getResponse();
         $this->assertNotEquals($expectedResponse, $response);
         $expectedResponse['response']['foo'][0] = 'dingus';
@@ -407,27 +364,24 @@ EOF;
     public function testRepeatDelay() {
         // A call that is immediately successful should not result in a delay
         $instance = $this->_getStub();
-        $instance->buildRequestURL('http://127.0.0.1');
         $startTime = microtime(true);
-        $instance->callGetResponse(false);
+        $instance->callGetResponse(new Request('http://127.0.0.1'), false);
         $baselineDiff = microtime(true) - $startTime;
         $expectedInterval = 2;
         $instance = $this->_getStub(
             array('responseTries' => 2, 'repeatPauseInterval' => $expectedInterval),
             array('getLastHTTPResponse' => $this->onConsecutiveCalls(500, 200))
         );
-        $instance->buildRequestURL('http://127.0.0.1');
         $startTime = microtime(true);
-        $instance->callGetResponse(false);
+        $instance->callGetResponse(new Request('http://127.0.0.1'), false);
         $elapsed = microtime(true) - $startTime;
         $this->assertEquals($expectedInterval, round($elapsed - $baselineDiff));
         $instance = $this->_getStub(
             array('responseTries' => 3, 'repeatPauseInterval' => $expectedInterval),
             array('getLastHTTPResponse' => $this->onConsecutiveCalls(500, 500, 200))
         );
-        $instance->buildRequestURL('http://127.0.0.1');
         $startTime = microtime(true);
-        $instance->callGetResponse(false);
+        $instance->callGetResponse(new Request('http://127.0.0.1'), false);
         $elapsed = microtime(true) - $startTime;
         $this->assertEquals($expectedInterval * 2, round($elapsed - $baselineDiff));
         /* Now what about specifying a hard minimum delay after each successful
@@ -436,20 +390,17 @@ EOF;
         $instance = $this->_getStub(
             array('requestDelayInterval' => $delayMillisecs)
         );
-        $instance->buildRequestURL('http://127.0.0.1');
+        $request = new Request('http://127.0.0.1');
         $startTime = microtime(true);
-        $instance->callGetResponse(false);
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse(false);
+        $instance->callGetResponse($request, false);
+        $instance->callGetResponse($request, false);
         $elapsed = microtime(true) - $startTime;
         $this->assertGreaterThanOrEqual($delayMillisecs / 1000, $elapsed);
         // Turn off the delay and make sure it goes away
         $instance = $this->_getStub();
-        $instance->buildRequestURL('http://127.0.0.1');
         $startTime = microtime(true);
-        $instance->callGetResponse(false);
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse(false);
+        $instance->callGetResponse($request, false);
+        $instance->callGetResponse($request, false);
         $elapsed = microtime(true) - $startTime;
         $this->assertLessThan($delayMillisecs / 1000, $elapsed);
     }
@@ -467,12 +418,11 @@ EOF;
             ),
             array('executeCurlHandle' => $this->returnValue(null))
         );
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse();
+        $request = new Request('http://127.0.0.1');
+        $instance->callGetResponse($request);
         $this->assertSame($instance->getResponse(), array());
         $instance->setProperty('guaranteeResponseArray', false);
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse();
+        $instance->callGetResponse($request);
         $this->assertSame($instance->getResponse(), null);
     }
     
@@ -487,8 +437,7 @@ EOF;
             array('responseFormat' => Base::RESPONSE_FORMAT_JSON),
             array('executeCurlHandle' => $this->returnValue(null))
         );
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse();
+        $instance->callGetResponse(new Request('http://127.0.0.1'));
     }
     
     /**
@@ -522,8 +471,8 @@ EOF;
             $stubProperties,
             array('executeCurlHandle' => $this->returnValue($jsonResponse))
         );
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse();
+        $request = new Request('http://127.0.0.1');
+        $instance->callGetResponse($request);
         /* Adding an additional element to the response that is not found in
         the prototype doesn't throw an exception. */
         $jsonResponse = <<<EOF
@@ -545,80 +494,19 @@ EOF;
             $stubProperties,
             array('executeCurlHandle' => $this->returnValue($jsonResponse))
         );
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse();
+        $instance->callGetResponse($request);
         // But adding an extra requirement to the prototype does
         $stubProperties['responsePrototype']['baz'] = null;
         $instance = $this->_getStub(
             $stubProperties,
             array('executeCurlHandle' => $this->returnValue($jsonResponse))
         );
-        $instance->buildRequestURL('http://127.0.0.1');
         try {
-            $instance->callGetResponse();
+            $instance->callGetResponse($request);
         } catch (\RuntimeException $e) {
             return;
         }
         $this->fail('Expected a RuntimeException.');
-    }
-    
-    /**
-     * Tests whether certain parameters persist as required in request URLs (or
-     * POST payloads).
-     */
-    public function testParameterPersistence() {
-        $requestMethods = array(
-            Base::TRANSFER_METHOD_GET => function($instance) {
-                return $instance->getRequestURL()->getQueryStringData();
-            },
-            Base::TRANSFER_METHOD_POST => function($instance) {
-                $o = $instance->getCurlOptions();
-                return isset($o[CURLOPT_POSTFIELDS]) ? $o[CURLOPT_POSTFIELDS] : array();
-            }
-        );
-        foreach ($requestMethods as $method => $callback) {
-            $persistentParams = array(
-                'token' => 'abc123', 'user' => 'steve_brule'
-            );
-            $instance = $this->_getStub(array(
-                'transferMethod' => $method,
-                'persistentParams' => $persistentParams
-            ));
-            $instance->buildRequestURL('http://127.0.0.1/');
-            $instance->callGetResponse(false);
-            $this->assertEquals($persistentParams, $callback($instance));
-            $params = array('user_type' => 'dingus');
-            $instance->buildRequestURL('http://127.0.0.1/', $params);
-            $instance->callGetResponse(false);
-            $this->assertEquals(
-                array_merge($persistentParams, $params), $callback($instance)
-            );
-            $params = array('user' => 'chip', 'user_type' => 'hunk');
-            $instance->buildRequestURL('http://127.0.0.1/', $params);
-            $instance->callGetResponse(false);
-            $this->assertEquals(
-                array_merge($persistentParams, $params), $callback($instance)
-            );
-            if ($method == Base::TRANSFER_METHOD_GET) {
-                /* Also make sure that we can selectively POST. The way this
-                probably should work is that choosing to do a POST puts all the
-                parameters there, including the persistent ones. However, due
-                to the split in the design between building the URL and making
-                the call, that's not possible. Someday I will completely revamp
-                this design. */
-                $params = array('for_your_health' => true);
-                $instance->buildRequestURL('http://127.0.0.1/');
-                $instance->callGetResponse(false, $params);
-                $curlOpts = $instance->getCurlOptions();
-                $this->assertEquals(
-                    $params, $curlOpts[CURLOPT_POSTFIELDS]
-                );
-                $this->assertEquals(
-                    $persistentParams,
-                    $instance->getRequestURL()->getQueryStringData()
-                );
-            }
-        }
     }
     
     /**
@@ -635,11 +523,11 @@ EOF;
                 200, 404, 400, 500
             ))
         );
-        $instance->buildRequestURL('http://127.0.0.1/');
-        $this->assertTrue($instance->callGetResponse(false));
-        $this->assertFalse($instance->callGetResponse(false));
-        $this->assertFalse($instance->callGetResponse(false));
-        $this->assertFalse($instance->callGetResponse(false));
+        $request = new Request('http://127.0.0.1/');
+        $this->assertTrue($instance->callGetResponse($request, false));
+        $this->assertFalse($instance->callGetResponse($request, false));
+        $this->assertFalse($instance->callGetResponse($request, false));
+        $this->assertFalse($instance->callGetResponse($request, false));
         $instance = $this->_getStub(
             array(
                 'httpResponseActionMap' => array(
@@ -667,14 +555,13 @@ EOF;
                 )
             )
         );
-        $instance->buildRequestURL('http://127.0.0.1/');
-        $this->assertTrue($instance->callGetResponse(false));
+        $this->assertTrue($instance->callGetResponse($request, false));
         $this->assertEquals(1, $instance->getAttemptCount());
-        $this->assertTrue($instance->callGetResponse(false));
+        $this->assertTrue($instance->callGetResponse($request, false));
         $this->assertEquals(3, $instance->getAttemptCount());
-        $this->assertFalse($instance->callGetResponse(false));
+        $this->assertFalse($instance->callGetResponse($request, false));
         $this->assertEquals(1, $instance->getAttemptCount());
-        $this->assertFalse($instance->callGetResponse(false));
+        $this->assertFalse($instance->callGetResponse($request, false));
         $this->assertEquals(1, $instance->getAttemptCount());
     }
     
@@ -736,8 +623,7 @@ EOF;
      */
     public function testCallInSeparateProcess() {
         $instance = new BlockingAPIInterface();
-        $instance->buildRequestURL('http://127.0.0.1/');
-        $instance->callGetResponse(false);
+        $instance->callGetResponse(new Request('http://127.0.0.1/'), false);
     }
     
     /**
@@ -751,22 +637,21 @@ EOF;
         $this->assertNotFalse($bootstrapFile);
         $instance = new BlockingAPIInterface();
         // This subclass is configured to block for two seconds
-        $instance->buildRequestURL('http://127.0.0.1/');
+        $request = new Request('http://127.0.0.1/');
         $startTime = time();
         $cmd = 'env phpunit --no-configuration --bootstrap=' . $bootstrapFile
              . ' --filter=testCallInSeparateProcess ' . __FILE__
              . ' > /dev/null';
         pclose(popen($cmd, 'r'));
-        $instance->callGetResponse(false);
+        $instance->callGetResponse($request, false);
         $this->assertGreaterThanOrEqual(2, time() - $startTime);
         // We should be able to make calls to other APIs as we please
         $instance = $this->_getStub(array(
             'requestDelayInterval' => 500
         ));
-        $instance->buildRequestURL('http://127.0.0.1/');
         pclose(popen($cmd, 'r'));
         $startTime = time();
-        $instance->callGetResponse(false);
+        $instance->callGetResponse($request, false);
         $this->assertLessThanOrEqual(1, time() - $startTime);
     }
     
@@ -779,8 +664,11 @@ EOF;
             'Foo: Bar',
             'Dingus: Drungle'
         );
-        $instance->buildRequestURL('http://127.0.0.1/');
-        $instance->callGetResponse(false, null, $customHeaders);
+        $request = new Request('http://127.0.0.1/');
+        foreach ($customHeaders as $header) {
+            $request->setHeader($header);
+        }
+        $instance->callGetResponse($request, false);
         $curlOpts = $instance->getCurlOptions();
         $this->assertEquals($customHeaders, $curlOpts[CURLOPT_HTTPHEADER]);
     }
@@ -811,9 +699,9 @@ EOF;
                 'executeCurlHandle' => $this->onConsecutiveCalls($json1, $json2)
             )
         );
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse();
-        $instance->callGetResponse();
+        $request = new Request('http://127.0.0.1/');
+        $instance->callGetResponse($request);
+        $instance->callGetResponse($request);
         $expectedContent = $json1 . $eol . $json2 . $eol;
         $this->assertEquals(
             $expectedContent, file_get_contents($tempFileName)
@@ -831,9 +719,8 @@ EOF;
                 'executeCurlHandle' => $this->onConsecutiveCalls($json1, $json2)
             )
         );
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse();
-        $instance->callGetResponse();
+        $instance->callGetResponse($request);
+        $instance->callGetResponse($request);
         $expectedContent .= $json1 . $eol . $json2 . $eol;
         $this->assertEquals(
             $expectedContent, file_get_contents($tempFileName)
@@ -850,10 +737,9 @@ EOF;
                 'executeCurlHandle' => $this->onConsecutiveCalls($json1, $json2)
             )
         );
-        $instance->buildRequestURL('http://127.0.0.1');
-        $instance->callGetResponse();
+        $instance->callGetResponse($request);
         $this->assertEquals(1, $instance->getArchiveCount());
-        $instance->callGetResponse();
+        $instance->callGetResponse($request);
         $this->assertEquals(2, $instance->getArchiveCount());
     }
 }

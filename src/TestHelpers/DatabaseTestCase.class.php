@@ -175,6 +175,11 @@ abstract class DatabaseTestCase extends \PHPUnit_Extensions_Database_TestCase {
         return $text;
     }
     
+    public function setUp() {
+        parent::setUp();
+        $this->resetDatabaseState();
+    }
+    
     /**
      * This returns an empty data set and should be overridden as necessary.
      *
@@ -214,6 +219,35 @@ abstract class DatabaseTestCase extends \PHPUnit_Extensions_Database_TestCase {
             return;
         }
         $this->fail('An instance of ' . $exceptionType . ' was not thrown.');
+    }
+    
+    /**
+     * Wraps up some of the cumbersome syntax of PHPUnit's table equality
+     * assertions. The default behavior is to construct a SQL statement that
+     * selects the same columns present in the metadata belonging to the
+     * first argument from a database table having the same name, and perform
+     * the assertion based on that. A different set of columns may be specified
+     * by passing them as a list in the second argument.
+     *
+     * @param PHPUnit_Extensions_Database_DataSet_DefaultTable $table
+     * @param array $columns = null
+     */
+    public function assertTableContentsEqual(
+        \PHPUnit_Extensions_Database_DataSet_DefaultTable $table,
+        array $columns = null
+    ) {
+        $meta = $table->getTableMetadata();
+        $tableName = $meta->getTableName();
+        if (!$columns) {
+            $columns = $meta->getColumns();
+        }
+        $this->assertTablesEqual(
+            $table, $this->getConnection()->createQueryTable(
+                $tableName, sprintf(
+                    'SELECT %s FROM %s', implode(', ', $columns), $tableName
+                )
+            )
+        );
     }
     
     /**

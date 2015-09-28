@@ -30,6 +30,10 @@ class Validator {
 	const FILTER_TRIM = 256;
 	// Asks the validation method to prepend 'http://' to URLs missing a scheme
 	const FILTER_ADD_SCHEME = 512;
+	// Filters to lower case
+	const FILTER_LOWERCASE = 1024;
+	// Filters to upper case
+	const FILTER_UPPERCASE = 2048;
 	// FILTER_TO_NULL | FILTER_TRIM
 	const FILTER_DEFAULT = 384;
 	// FILTER_ADD_SCHEME | FILTER_TO_NULL | FILTER_TRIM
@@ -196,6 +200,14 @@ class Validator {
 				return $this->_throwError(
 					$failureMessage, __METHOD__, null, $str
 				);
+			}
+		}
+		if ($str !== null) {
+			if ($options & self::FILTER_LOWERCASE) {
+				$str = strtolower($str);
+			}
+			elseif ($options & self::FILTER_UPPERCASE) {
+				$str = strtoupper($str);
 			}
 		}
 		return $str;

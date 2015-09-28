@@ -151,6 +151,36 @@ EOF;
         $this->assertEquals('abcde', $validator->string(
             '    abcde ', null, Validator::FILTER_DEFAULT, 6
         ));
+        // Filter to lowercase
+        $this->assertEquals('foo', $validator->string(
+            'FoO', null, Validator::FILTER_LOWERCASE
+        ));
+        $this->assertEquals('foo', $validator->string(
+            '  FOO', null, Validator::FILTER_TRIM | Validator::FILTER_LOWERCASE
+        ));
+        $this->assertNull($validator->string(
+            null, null, Validator::FILTER_DEFAULT | Validator::FILTER_LOWERCASE
+        ));
+        $this->assertNull($validator->string(
+            '', null, Validator::FILTER_DEFAULT | Validator::FILTER_LOWERCASE
+        ));
+        /* The uppercase filter only takes effect if the lowercase filter isn't
+        in the bitmask. */
+        $this->assertEquals('foo', $validator->string(
+            '  FOO',
+            null,
+            Validator::FILTER_TRIM | Validator::FILTER_LOWERCASE | Validator::FILTER_UPPERCASE
+        ));
+        // Filter to uppercase
+        $this->assertEquals('FOO', $validator->string(
+            'foo    ', null, Validator::FILTER_TRIM | Validator::FILTER_UPPERCASE
+        ));
+        $this->assertNull($validator->string(
+            null, null, Validator::FILTER_DEFAULT | Validator::FILTER_UPPERCASE
+        ));
+        $this->assertNull($validator->string(
+            '', null, Validator::FILTER_DEFAULT | Validator::FILTER_UPPERCASE
+        ));
     }
     
     /**
@@ -452,6 +482,17 @@ EOF;
                 "\twww.foo.co.uk/asdf?foo=bar&bar=baz   ", null, 0
             )
         );
+        // We can filter to upper- or lowercase
+        $this->assertSame('http://www.foo.com/asdf', $validator->URL(
+            '    www.Foo.Com/ASDF',
+            null,
+            Validator::FILTER_DEFAULT_URL | Validator::FILTER_LOWERCASE
+        ));
+        $this->assertSame('HTTPS://WWW.FOO.COM/ASDF', $validator->URL(
+            'https://www.Foo.Com/ASDF',
+            null,
+            Validator::FILTER_DEFAULT_URL | Validator::FILTER_UPPERCASE
+        ));
         /* Passing a URL object doesn't work because the string validation that
         happens as the first stage expects a scalar. */
         $this->assertThrows(
@@ -562,6 +603,18 @@ EOF;
                 0
             )
         );
+        // Filter to upper- or lowercase
+        $this->assertEquals('hello@me.com', $validator->email(
+            'hELLO@ME.COM  ',
+            null,
+            Validator::FILTER_DEFAULT | Validator::FILTER_LOWERCASE
+        ));
+        
+        $this->assertEquals('HELLO@ME.COM,HELLO@YOU.COM', $validator->email(
+            'hELLO@ME.COM , Hello@you.com',
+            null,
+            Validator::FILTER_DEFAULT | Validator::FILTER_UPPERCASE
+        ));
         // The default filtering trims and coerces empty values to null
         $this->assertNull($validator->email(null));
         $this->assertNull($validator->email(''));
