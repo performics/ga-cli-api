@@ -2,23 +2,14 @@
 namespace Google\Analytics;
 
 class AccountSummary extends AbstractNamedAPIResponseObject {
-	protected static $_SUPPLEMENTAL_SETTER_DISPATCH_MODEL = array(
+	protected static $_SETTER_DISPATCH_MODEL = array(
 		'webProperties' => 'setWebPropertySummaries'
 	);
+	protected static $_GETTER_DISPATCH_MODEL = array();
+	protected static $_MERGE_DISPATCH_MODELS = true;
+	protected static $_dispatchModelReady = false;
 	protected $_webPropertySummariesByName = array();
 	protected $_webPropertySummariesByID = array();
-	
-	public function __construct(array $apiData = null) {
-		if (!isset(static::$_SETTER_DISPATCH_MODEL[
-			key(self::$_SUPPLEMENTAL_SETTER_DISPATCH_MODEL)
-		])) {
-			static::$_SETTER_DISPATCH_MODEL = array_merge(
-				static::$_SETTER_DISPATCH_MODEL,
-				self::$_SUPPLEMENTAL_SETTER_DISPATCH_MODEL
-			);
-		}
-		parent::__construct($apiData);
-	}
 	
 	/**
 	 * @param array $webProperties
@@ -26,7 +17,7 @@ class AccountSummary extends AbstractNamedAPIResponseObject {
 	public function setWebPropertySummaries(array $webProperties) {
 		foreach ($webProperties as $webProperty) {
 			if (is_array($webProperty)) {
-				$webProperty = \Google\APIResponseObjectFactory::create(
+				$webProperty = APIResponseObjectFactory::create(
 					$webProperty
 				);
 			}

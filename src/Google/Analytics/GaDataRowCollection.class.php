@@ -91,6 +91,19 @@ class GaDataRowCollection implements \Countable {
 	}
 	
 	/**
+	 * Discards the last n rows from the collection.
+	 *
+	 * @param int $count
+	 */
+	public function discard($count) {
+		$count = self::$_validator->number(
+			$count, null, \Validator::ASSERT_INT_DEFAULT
+		);
+		array_splice($this->_rows, $this->_rowCount - $count);
+		$this->_rowCount -= $count;
+	}
+	
+	/**
 	 * Resets the internal row pointer so that the contents of the collection
 	 * may be fetched again.
 	 */

@@ -10,14 +10,14 @@ new query to the Google Analytics API rather than using information from the dat
 
 EOF
 );
-require_once('bootstrap.php');
+require_once(__DIR__ . DIRECTORY_SEPARATOR . 'bootstrap.php');
 try {
     $args = PFXUtils::collapseArgs(
         array('f', 'h'),
         array('force-refresh', 'help')
     );
     $ga = new Google\Analytics\API();
-    if (isset($args['force-refresh'])) {
+    if ($args['force-refresh']) {
         $ga->clearAccountCache();
     }
     $accounts = $ga->getAccountSummaries();

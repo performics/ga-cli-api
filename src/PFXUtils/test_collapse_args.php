@@ -8,7 +8,7 @@ PFXUtils::collapseArgs() (in array form, the same way they would be passed to
 call_user_func_array()). This may optionally be followed by a string to define
 as PFX_USAGE_MESSAGE, which may optionally be followed by a string to define as
 PFX_SHORT_USAGE_MESSAGE. */
-require_once('PFXUtils.class.php');
+require_once(__DIR__ . DIRECTORY_SEPARATOR . 'PFXUtils.class.php');
 try {
     $modifiers = new SplStack();
     while ($argv) {

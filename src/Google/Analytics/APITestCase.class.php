@@ -14,6 +14,7 @@ if ((!defined('TEST_IGNORE_DB') || !TEST_IGNORE_DB) && !defined('OAUTH_DB_DSN'))
 
 // We will reuse FakeOAuthService from this test case
 require_once(__DIR__ . '/../ServiceAccountAPITestCase.class.php');
+use \Google\TestAPIRequest as TestAPIRequest;
 
 class TestAPI extends API {
     /* This subclass of the real class we're testing provides public hooks for
@@ -39,6 +40,43 @@ class TestAPI extends API {
     
     public function getLastHTTPResponse() {
         return 200;
+    }
+}
+
+class PaginationTestAPI extends TestAPI {
+    /* This subclass is necessary because I did some refactoring, which
+    required moving a test from Google\ServiceAccountAPITestCase to here, and
+    that test wasn't written to be compatible with the stricter object typing
+    that Google\Analytics\API enforces. */
+    protected static function _configureOAuthService() {
+        if (!TestAPIRequest::hasOAuthService()) {
+            TestAPIRequest::registerOAuthService(new \Google\FakeOAuthService());
+        }
+    }
+    
+    protected function _castResponse() {
+        /* Swallow the exception that Google\Analytics\APIResponseObjectFactory
+        will throw. */
+        try {
+            parent::_castResponse();
+        } catch (InvalidArgumentException $e) {}
+        return $this->_responseParsed;
+    }
+    
+    /**
+     * @param Google\ServiceAccountAPIRequest $request
+     */
+    public function prepareRequest(\Google\ServiceAccountAPIRequest $request) {
+        $this->_prepareRequest($request);
+    }
+    
+    /**
+     * @param Google\ServiceAccountAPIRequest $request = null
+     * @return mixed
+     */
+    public function makeRequest(\Google\ServiceAccountAPIRequest $request = null)
+    {
+		return $this->_makeRequest($request);
     }
 }
 
@@ -535,7 +573,7 @@ EOF;
             'executeCurlHandle' => $this->returnValue($response)
         ));
         $this->assertThrows(
-            'Google\BadMethodCallException',
+            __NAMESPACE__ . '\BadMethodCallException',
             array($instance, 'getAccountSummaries')
         );
         // This will fail because there is no Google\Analytics\FooBar class
@@ -559,7 +597,7 @@ EOF;
         /* Doesn't matter what method we call as long as it makes a request to
         the remote service. */
         $this->assertThrows(
-            'Google\BadMethodCallException',
+            __NAMESPACE__ . '\BadMethodCallException',
             array($instance, 'getSegments')
         );
         // This will fail because neither the 'kind' nor 'items' key is present
@@ -575,7 +613,7 @@ EOF;
             'executeCurlHandle' => $this->returnValue($response)
         ));
         $this->assertThrows(
-            'Google\InvalidArgumentException',
+            __NAMESPACE__ . '\InvalidArgumentException',
             array($instance, 'getSegments')
         );
         // This will fail because the 'kind' property is malformed
@@ -592,7 +630,7 @@ EOF;
             'executeCurlHandle' => $this->returnValue($response)
         ));
         $this->assertThrows(
-            'Google\UnexpectedValueException',
+            __NAMESPACE__ . '\UnexpectedValueException',
             array($instance, 'getSegments')
         );
     }
@@ -828,6 +866,59 @@ EOF;
         $this->assertContains(
             $response, file_get_contents(GOOGLE_ANALYTICS_API_LOG_FILE)
         );
+    }
+    
+    /**
+     * Tests that the automatic pagination feature works as expected.
+     */
+    public function testPagination() {
+        $data = array(
+            array(
+                'iteration' => 1,
+                'uniq' => $this->_generateRandomText(128),
+                'nextLink' => 'http://foo.bar/api_paginated/?p=2&h=iogfnaeorghiua'
+            ),
+            array(
+                'iteration' => 2,
+                'uniq' => $this->_generateRandomText(128),
+                'nextLink' => 'http://foo.bar/api_paginated/?p=3&h=adsfeansgytukt'
+            ),
+            array(
+                'iteration' => 3,
+                'uniq' => $this->_generateRandomText(128),
+                'nextLink' => 'http://foo.bar/api_paginated/?p=4&h=dfsfgjsrtrtjrt'
+            ),
+            array(
+                'iteration' => 4,
+                'uniq' => $this->_generateRandomText(128)
+            )
+        );
+        $instance = $this->getMockBuilder(__NAMESPACE__ . '\PaginationTestAPI')
+                         ->setMethods(array('executeCurlHandle'))->getMock();
+        $instance->method('executeCurlHandle')->will($this->onConsecutiveCalls(
+                            json_encode($data[0]),
+                            json_encode($data[1]),
+                            json_encode($data[2]),
+                            json_encode($data[3])
+                         ));
+        $iteration = 0;
+        $expectedIterations = 4;
+        $instance->prepareRequest(new TestAPIRequest('http://foo.bar/api'));
+        while ($response = $instance->makeRequest()) {
+            if ($iteration > 0) {
+                $this->assertTrue($instance->getRequest()->getURL()->compare(
+                    $data[$iteration - 1]['nextLink']
+                ));
+            }
+            else {
+                $this->assertEquals(
+                    'http://foo.bar/api',
+					(string)$instance->getRequest()->getURL()
+                );
+            }
+            $this->assertEquals($data[$iteration++], $response);
+        }
+        $this->assertEquals($expectedIterations, $iteration);
     }
     
     /**
@@ -1197,6 +1288,8 @@ EOF;
         $query->setMetrics(array("users", "organicSearches"));
         $query->setDimensions(array('source'));
         $query->setMaxResults(5);
+		/* Note that this total result amount is hardcoded in
+		Google/Analytics/APITestData::$TEST_PAGED_QUERY_RESPONSE_1. */
         $expected['getTotalResults'] = 27;
         $expected['getItemsPerPage'] = 5;
         $expected['getNextLink'] = 'https://www.googleapis.com/analytics/v3/data/ga?ids=ga:12345&dimensions=ga:source&metrics=ga:users%2Cga:organicSearches&start-date=2015-06-01&end-date=2015-06-02&start-index=6&max-results=5';
@@ -1270,6 +1363,140 @@ EOF;
             $instance->getLastFetchedRowCount()
         );
     }
+	
+	/**
+	 * Tests the API behavior with a query where we ask for a total number of
+	 * results less than the available number of results.
+	 */
+	public function testTruncatedQuery() {
+		// This test broadly follows Google\Analytics\APITestCase::testBasicQuery()
+		$instance = $this->_getStub(array(
+            'executeCurlHandle' => $this->onConsecutiveCalls(
+                APITestData::$TEST_COLUMNS_RESPONSE,
+                APITestData::$TEST_QUERY_RESPONSE
+            )
+        ));
+		$query = new GaDataQuery();
+        $query->setProfile(new ProfileSummary(array(
+            'id' => 'ga:12345',
+            'name' => 'security Blog',
+            'type' => 'WEB'
+        )));
+        $query->setStartDate("2015-06-01");
+        $query->setEndDate("2015-06-02");
+        $query->setMetrics(array("users", "organicSearches"));
+        $query->setDimensions(array("medium"));
+		$query->setTotalResults(2);
+        $expected = array(
+            'containsSampledData' => false,
+            'getItemsPerPage' => 500,
+            'getTotalResults' => 3,
+            'getPreviousLink' => null,
+            'getNextLink' => null,
+            'getProfileInfo' => array(
+                'profileId' => '12345',
+                'accountId' => '98765',
+                'webPropertyId' => 'UA-98765-1',
+                'internalWebPropertyId' => '46897987',
+                'profileName' => 'security Blog',
+                'tableId' => 'ga:12345'
+            ),
+            'getColumnHeaders' => new GaDataColumnHeaderCollection(
+                APITestData::$TEST_QUERY_RESPONSE_COLUMNS, $instance
+            ),
+            'getRows' => new GaDataRowCollection(
+                array_slice(APITestData::$TEST_QUERY_RESPONSE_ROWS, 0, 2)
+            ),
+            'getSampleSize' => null,
+            'getSampleSpace' => null,
+            'getTotals' => array(
+                'ga:users' => '151',
+                'ga:organicSearches' => '31'
+            )
+        );
+		$expected['getRows']->setColumnHeaders($expected['getColumnHeaders']);
+        foreach ($expected['getTotals'] as $gaName => $total) {
+            $expected['getColumnHeaders']->getColumn(
+                substr($gaName, 3)
+            )->setTotal($total);
+        }
+		$data = $instance->query($query);
+        $this->_runAssertions($expected, $data);
+		/* Even though the returned object only had two rows in it (as we
+		requested), the API instance still fetched three rows. */
+		$this->assertEquals(
+            count(APITestData::$TEST_QUERY_RESPONSE_ROWS),
+            $instance->getLastFetchedRowCount()
+        );
+		// Try a paged query where we stop on a page boundary
+		$instance = $this->_getStub(array(
+            'executeCurlHandle' => $this->onConsecutiveCalls(
+                APITestData::$TEST_PAGED_QUERY_RESPONSE_1,
+                APITestData::$TEST_PAGED_QUERY_RESPONSE_2
+            )
+        ), false);
+		$query = new GaDataQuery();
+        $query->setProfile(new ProfileSummary(array(
+            'id' => 'ga:12345',
+            'name' => 'security Blog',
+            'type' => 'WEB'
+        )));
+        $query->setStartDate("2015-06-01");
+        $query->setEndDate("2015-06-02");
+        $query->setMetrics(array("users", "organicSearches"));
+        $query->setDimensions(array('source'));
+        $query->setMaxResults(5);
+		$query->setTotalResults(5);
+		$expected['getTotalResults'] = 27;
+        $expected['getItemsPerPage'] = 5;
+        $expected['getNextLink'] = 'https://www.googleapis.com/analytics/v3/data/ga?ids=ga:12345&dimensions=ga:source&metrics=ga:users%2Cga:organicSearches&start-date=2015-06-01&end-date=2015-06-02&start-index=6&max-results=5';
+        $expected['getColumnHeaders'] = new GaDataColumnHeaderCollection(
+            APITestData::$TEST_PAGED_QUERY_RESPONSE_COLUMNS, $instance
+        );
+        $expected['getRows'] = new GaDataRowCollection(
+            APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_1
+        );
+        $expected['getRows']->setColumnHeaders($expected['getColumnHeaders']);
+        foreach ($expected['getTotals'] as $gaName => $total) {
+            $expected['getColumnHeaders']->getColumn(
+                substr($gaName, 3)
+            )->setTotal($total);
+        }
+		while ($data = $instance->query($query)) {
+			$lastData = $data;
+		}
+		$this->_runAssertions($expected, $lastData);
+		$this->assertEquals(
+            count(APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_1),
+            $instance->getLastFetchedRowCount()
+        );
+		// Now try one where we stop in the middle of a page
+		$instance = $this->_getStub(array(
+            'executeCurlHandle' => $this->onConsecutiveCalls(
+                APITestData::$TEST_PAGED_QUERY_RESPONSE_1,
+                APITestData::$TEST_PAGED_QUERY_RESPONSE_2
+            )
+        ), false);
+		$query->setTotalResults(7);
+		$expected['getRows'] = new GaDataRowCollection(
+            array_slice(APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_2, 0, 2)
+        );
+        $expected['getRows']->setColumnHeaders($expected['getColumnHeaders']);
+		$expected['getPreviousLink'] = 'https://www.googleapis.com/analytics/v3/data/ga?ids=ga:12345&dimensions=ga:source&metrics=ga:users%2Cga:organicSearches&start-date=2015-06-01&end-date=2015-06-02&start-index=1&max-results=5';
+		$expected['getNextLink'] = 'https://www.googleapis.com/analytics/v3/data/ga?ids=ga:12345&dimensions=ga:source&metrics=ga:users%2Cga:organicSearches&start-date=2015-06-01&end-date=2015-06-02&start-index=11&max-results=5';
+		$iterations = 0;
+		while ($data = $instance->query($query)) {
+			$iterations++;
+			$lastData = $data;
+		}
+		$this->_runAssertions($expected, $lastData);
+		$this->assertEquals(2, $iterations);
+		$this->assertEquals(
+            count(APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_1) +
+            count(APITestData::$TEST_PAGED_QUERY_RESPONSE_ROWS_2),
+            $instance->getLastFetchedRowCount()
+        );
+	}
     
     /**
      * Tests the API behavior with an iterative query, which is a bit different

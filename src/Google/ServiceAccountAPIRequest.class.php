@@ -4,6 +4,8 @@ require_once(__DIR__ . DIRECTORY_SEPARATOR . 'Exception.class.php');
 
 abstract class ServiceAccountAPIRequest extends \GenericAPI\Request {
     protected static $_oauthService;
+    // We won't get a response back if our request triggers a 304
+    protected $_expectResponseLength = false;
     
     /**
      * @param OAuth\IService $service
@@ -40,6 +42,16 @@ abstract class ServiceAccountAPIRequest extends \GenericAPI\Request {
                 $i--;
             }
         }
+    }
+    
+    /**
+     * Extends the parent method to handle the automatic passing of the
+     * appropriate Content-Type parameter for JSON payloads.
+     *
+     * @param array, string $args
+     */
+    public function setPayload($args, $contentType = 'application/json') {
+        parent::setPayload($args, $contentType);
     }
     
     /**

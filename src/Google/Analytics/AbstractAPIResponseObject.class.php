@@ -2,10 +2,13 @@
 namespace Google\Analytics;
 require_once(__DIR__ . DIRECTORY_SEPARATOR . 'Exception.class.php');
 
-abstract class AbstractAPIResponseObject extends \Google\AbstractAPIResponseObject {
+abstract class AbstractAPIResponseObject extends \GenericAPI\RESTObject {
 	protected static $_SETTER_DISPATCH_MODEL = array(
 		'id' => 'setID'
 	);
+	protected static $_GETTER_DISPATCH_MODEL = array();
+	protected static $_MERGE_DISPATCH_MODELS = true;
+	protected static $_dispatchModelReady = false;
 	protected static $_validator;
 	protected $_id;
 	

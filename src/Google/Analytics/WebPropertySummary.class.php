@@ -2,27 +2,18 @@
 namespace Google\Analytics;
 
 class WebPropertySummary extends AbstractNamedAPIResponseObject {
-	protected static $_SUPPLEMENTAL_SETTER_DISPATCH_MODEL = array(
+	protected static $_SETTER_DISPATCH_MODEL = array(
 		'level' => 'setLevel',
 		'websiteUrl' => 'setURL',
 		'profiles' => 'setProfileSummaries'
 	);
+	protected static $_GETTER_DISPATCH_MODEL = array();
+	protected static $_MERGE_DISPATCH_MODELS = true;
+	protected static $_dispatchModelReady = false;
 	protected $_level;
 	protected $_url;
 	protected $_profileSummariesByName = array();
 	protected $_profileSummariesByID = array();
-	
-	public function __construct(array $apiData = null) {
-		if (!isset(static::$_SETTER_DISPATCH_MODEL[
-			key(self::$_SUPPLEMENTAL_SETTER_DISPATCH_MODEL)
-		])) {
-			static::$_SETTER_DISPATCH_MODEL = array_merge(
-				static::$_SETTER_DISPATCH_MODEL,
-				self::$_SUPPLEMENTAL_SETTER_DISPATCH_MODEL
-			);
-		}
-		parent::__construct($apiData);
-	}
 	
 	/**
 	 * @param string $level
@@ -44,7 +35,7 @@ class WebPropertySummary extends AbstractNamedAPIResponseObject {
 	public function setProfileSummaries($profiles) {
 		foreach ($profiles as $profile) {
 			if (is_array($profile)) {
-				$profile = \Google\APIResponseObjectFactory::create(
+				$profile = APIResponseObjectFactory::create(
 					$profile
 				);
 			}

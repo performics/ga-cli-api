@@ -624,7 +624,11 @@ Sets the 1-based index of the first row of results to be included for this query
 
 ##### `void setMaxResults(int $maxResults)`
 
-Sets the maximum number of results to be returned for this query.
+Sets the maximum number of results to be returned per iteration of this query.
+
+##### `void setTotalREsults(int $totalResults)`
+
+Sets the maximum total number of results to be returned for this query.
 
 ##### `void setFormatString(string $format)`
 
@@ -673,6 +677,8 @@ Returns the query's sampling level either as an integer constant or its equivale
 ##### `int getStartIndex()`
 
 ##### `int getMaxResults()`
+
+##### `int getTotalResults()`
 
 ##### `array getAsArray()`
 

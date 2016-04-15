@@ -42,13 +42,6 @@ class TestAPI extends ServiceAccountAPI {
     }
     
     /**
-     * @param Google\ServiceAccountAPIRequest $request
-     */
-    public function prepareRequest(ServiceAccountAPIRequest $request) {
-        $this->_prepareRequest($request);
-    }
-    
-    /**
      * @param Google\ServiceAccountAPIRequest $request = null
      * @return mixed
      */
@@ -110,56 +103,6 @@ EOF;
         foreach ($extraHeaders as $header) {
             $this->assertContains($header, $curlOpts[CURLOPT_HTTPHEADER]);
         }
-    }
-    
-    /**
-     * Tests that the automatic pagination feature works as expected.
-     */
-    public function testPagination() {
-        $data = array(
-            array(
-                'iteration' => 1,
-                'uniq' => $this->_generateRandomText(128),
-                'nextLink' => 'http://foo.bar/api_paginated/?p=2&h=iogfnaeorghiua'
-            ),
-            array(
-                'iteration' => 2,
-                'uniq' => $this->_generateRandomText(128),
-                'nextLink' => 'http://foo.bar/api_paginated/?p=3&h=adsfeansgytukt'
-            ),
-            array(
-                'iteration' => 3,
-                'uniq' => $this->_generateRandomText(128),
-                'nextLink' => 'http://foo.bar/api_paginated/?p=4&h=dfsfgjsrtrtjrt'
-            ),
-            array('iteration' => 4, 'uniq' => $this->_generateRandomText(128))
-        );
-        $instance = $this->_getStub(array(
-            'executeCurlHandle' => $this->onConsecutiveCalls(
-                json_encode($data[0]),
-                json_encode($data[1]),
-                json_encode($data[2]),
-                json_encode($data[3])
-            )
-        ));
-        $iteration = 0;
-        $expectedIterations = 4;
-        $instance->prepareRequest(new TestAPIRequest('http://foo.bar/api'));
-        while ($response = $instance->makeRequest()) {
-            if ($iteration > 0) {
-                $this->assertTrue($instance->getRequest()->getURL()->compare(
-                    $data[$iteration - 1]['nextLink']
-                ));
-            }
-            else {
-                $this->assertEquals(
-                    'http://foo.bar/api',
-					(string)$instance->getRequest()->getURL()
-                );
-            }
-            $this->assertEquals($data[$iteration++], $response);
-        }
-        $this->assertEquals($expectedIterations, $iteration);
     }
 	
 	/**

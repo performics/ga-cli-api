@@ -2,7 +2,7 @@
 namespace OAuth;
 
 // Reuse the test classes from this case
-require_once('GrantedAuthorizationModuleTestCase.class.php');
+require_once(__DIR__ . DIRECTORY_SEPARATOR . 'GrantedAuthorizationModuleTestCase.class.php');
 if ((!defined('TEST_IGNORE_DB') || !TEST_IGNORE_DB) && !defined('OAUTH_DB_DSN')) {
     define('OAUTH_DB_DSN', TEST_DB_DSN);
     define('OAUTH_DB_USER', TEST_DB_USER);

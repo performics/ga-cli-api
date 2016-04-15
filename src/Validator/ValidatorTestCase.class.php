@@ -237,6 +237,14 @@ EOF;
         $this->assertNull($validator->number(
             null, null, Validator::ASSERT_ALLOW_NULL | Validator::ASSERT_INT | Validator::ASSERT_TYPE_MATCH
         ));
+        /* All of the above also works on empty strings if we assert that they
+        should be coerced to null. */
+        $this->assertNull($validator->number(
+            '', null, Validator::ASSERT_ALLOW_NULL | Validator::FILTER_TO_NULL
+        ));
+        $this->assertNull($validator->number(
+            '', null, Validator::ASSERT_ALLOW_NULL | Validator::FILTER_TO_NULL | Validator::ASSERT_INT | Validator::ASSERT_TYPE_MATCH
+        ));
         // Truth assertions work here as expected
         $this->assertSame(-5, $validator->number(
             '-5', null, Validator::ASSERT_TRUTH
@@ -653,6 +661,88 @@ EOF;
                 null,
                 Validator::FILTER_DEFAULT | Validator::ASSERT_SINGLE_EMAIL
             )
+        );
+    }
+    
+    public function testEnumValidation() {
+        $validator = new Validator();
+        // This method should fail if we haven't set up the enum list
+        $this->assertThrows(
+            'LogicException',
+            array($validator, 'enum'),
+            array('foo')
+        );
+        $validator->setEnumValues(array(
+            '',
+            '0',
+            0,
+            false,
+            '1',
+            'foo',
+            ' BAR '
+        ));
+        // Passing anything that's not a scalar should throw an exception
+        $this->assertThrows(
+            'InvalidArgumentException',
+            array($validator, 'enum'),
+            array(array())
+        );
+        $this->assertThrows(
+            'InvalidArgumentException',
+            array($validator, 'enum'),
+            array(new stdClass())
+        );
+        $this->assertThrows(
+            'InvalidArgumentException',
+            array($validator, 'enum'),
+            array(null)
+        );
+        // But we can get nulls to validate if we pass the proper assertion
+        $this->assertNull(
+            $validator->enum(null, null, Validator::ASSERT_ALLOW_NULL)
+        );
+        /* If we don't pass any options, we get loose matching. Note that
+        boolean true was not included in the enumeration. */
+        $this->assertSame(true, $validator->enum(true));
+        // Asserting the type should stop that from working
+        $this->assertThrows(
+            'InvalidArgumentException',
+            array($validator, 'enum'),
+            array(true, null, Validator::ASSERT_TYPE_MATCH)
+        );
+        $this->assertThrows(
+            'InvalidArgumentException',
+            array($validator, 'enum'),
+            array(1, null, Validator::ASSERT_TYPE_MATCH)
+        );
+        $this->assertSame(
+            '1', $validator->enum('1', null, Validator::ASSERT_TYPE_MATCH)
+        );
+        $this->assertSame(
+            false, $validator->enum(false, null, Validator::ASSERT_TYPE_MATCH)
+        );
+        $this->assertSame(
+            '0', $validator->enum('0', null, Validator::ASSERT_TYPE_MATCH)
+        );
+        $this->assertSame(
+            0, $validator->enum(0, null, Validator::ASSERT_TYPE_MATCH)
+        );
+        $this->assertSame(
+            '', $validator->enum('', null, Validator::ASSERT_TYPE_MATCH)
+        );
+        // The trim filter could also be useful
+        $this->assertSame(
+            '', $validator->enum('     ', null, Validator::FILTER_TRIM)
+        );
+        $this->assertSame(
+            'foo', $validator->enum('    foo', null, Validator::FILTER_TRIM)
+        );
+        /* This won't work though, because the string is trimmed before it is
+        tested for presence in the enumeration. */
+        $this->assertThrows(
+            'InvalidArgumentException',
+            array($validator, 'enum'),
+            array(' BAR ', null, Validator::FILTER_TRIM)
         );
     }
 }

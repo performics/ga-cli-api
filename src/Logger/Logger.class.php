@@ -97,9 +97,7 @@ class Logger {
 		if ($this->_email) {
 			$this->flushMailBuffer();
 		}
-		if ($this->_mutex->isAcquired()) {
-			$this->_mutex->release();
-		}
+		$this->_mutex->release();
 		if ($this->_logFileHandle) {
 			call_user_func($this->_closeFunction, $this->_logFileHandle);
 		}
@@ -136,16 +134,14 @@ class Logger {
 		if ($this->_externalBuffer !== null) {
 			$this->_externalBuffer[] = $message;
 		}
-		$useLocalMutex = !$this->_mutex->isAcquired();
-		if ($useLocalMutex) {
-			$this->_mutex->acquire();
-		}
+		$this->_mutex->acquire();
 		// Open file handle first, if necessary
 		if (!is_resource($this->_logFileHandle)) {
 			$this->_logFileHandle = call_user_func_array(
 				$this->_openFunction, array($this->_logFileName, 'ab')
 			);
 			if (!$this->_logFileHandle) {
+				$this->_mutex->release();
 				throw new LoggerException(
 					'Unable to open ' . $this->_logFileHandle . 
 					' for writing.'
@@ -156,9 +152,7 @@ class Logger {
 			$this->_logFileHandle, $message . PHP_EOL
 		));
 		$this->_wroteToHandle = true;
-		if ($useLocalMutex) {
-			$this->_mutex->release();
-		}
+		$this->_mutex->release();
 	}
 	
 	/**
@@ -185,23 +179,18 @@ class Logger {
 		if (!$this->_wroteToHandle) {
 			return;
 		}
-		$useLocalMutex = !$this->_mutex->isAcquired();
-		if ($useLocalMutex) {
-			$this->_mutex->acquire();
-		}
+		$this->_mutex->acquire();
 		call_user_func($this->_closeFunction, $this->_logFileHandle);
 		$this->_logFileHandle = call_user_func_array(
 			$this->_openFunction, array($this->_logFileName, 'ab')
 		);
+		$this->_mutex->release();
 		if (!$this->_logFileHandle) {
 			throw new LoggerException(
 				'Unopen to reopen ' . $this->_logFileName . ' for writing.'
 			);
 		}
 		$this->_wroteToHandle = false;
-		if ($useLocalMutex) {
-			$this->_mutex->release();
-		}
 	}
 
 	/**

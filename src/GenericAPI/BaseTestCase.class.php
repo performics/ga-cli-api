@@ -1,6 +1,7 @@
 <?php
 namespace GenericAPI;
 
+class TestAPIException extends \RuntimeException {}
 class MutableAPIInterface extends Base {
     /* This is a concrete implementation of GenericAPI\Base that provides
     certain functionality for testing purposes. */
@@ -9,7 +10,11 @@ class MutableAPIInterface extends Base {
     }
     
     protected function _getLastHTTPResponse() {
-        return $this->getLastHTTPResponse();
+        $code = $this->getLastHTTPResponse();
+        /* If I don't cache the result of this call in a property, it screws up
+        the tests where I rely on setting up consecutive return values. */
+        $this->_responseCode = $code;
+        return $code;
     }
     
     /**
@@ -21,6 +26,14 @@ class MutableAPIInterface extends Base {
      */
     public static function registerSSLCertificate($certFile, $host = '*') {
         self::_registerSSLCertificate($certFile, $host);
+    }
+    
+    protected function _handleError() {
+        if ($this->_responseCode != 200) {
+            throw new TestAPIException(
+                'Got a response code of ' . $this->_responseCode . '.'
+            );
+        }
     }
     
     /**
@@ -81,10 +94,9 @@ class MutableAPIInterface extends Base {
      *
      * @param GenericAPI\Request $request
      * @param boolean $parse = true
-     * @return boolean
      */
     public function callGetResponse(Request $request, $parse = true) {
-        return $this->_getResponse($request, $parse);
+        $this->_getResponse($request, $parse);
     }
     
     /**
@@ -141,24 +153,23 @@ class BaseTestCase extends \TestHelpers\TempFileTestCase {
     public function testHTTPVerb() {
         $instance = $this->_getStub();
         $instance->callGetResponse(new Request('http://127.0.0.1/'), false);
-        /* It's difficult to test this properly. I would like to examine the
-        HTTP headers that are actually sent, but I can't think of a way to
-        do a dummy HTTP connection, so I am making do by assuming that GET is
-        used if neither CURLOPT_POST nor CURLOPT_CUSTOMREQUEST are present in
-        the options. */
         $curlOptions = $instance->getCurlOptions();
+        $this->assertEquals('GET', $curlOptions[CURLOPT_CUSTOMREQUEST]);
+        /* The use of CURLOPT_POST in this framework should be deprecated by
+        now, so I'm going to keep the assertions that it not be present in the
+        cURL options. */
         $this->assertArrayNotHasKey(CURLOPT_POST, $curlOptions);
-        $this->assertArrayNotHasKey(CURLOPT_CUSTOMREQUEST, $curlOptions);
         $this->assertEquals(
             (string)$instance->getRequest()->getURL(), 'http://127.0.0.1/'
         );
-        // Setting POST parameters in the request implicitly triggers a POST
+        // Setting a payload in the request implicitly triggers a POST
         $params = array('foo' => 'bar');
         $request = new Request('http://127.0.0.1/');
-        $request->setPostParameters($params);
+        $request->setPayload($params);
         $instance->callGetResponse($request, false);
         $curlOptions = $instance->getCurlOptions();
-        $this->assertArrayHasKey(CURLOPT_POST, $curlOptions);
+        $this->assertEquals('POST', $curlOptions[CURLOPT_CUSTOMREQUEST]);
+        $this->assertArrayNotHasKey(CURLOPT_POST, $curlOptions);
         $this->assertEquals($params, $curlOptions[CURLOPT_POSTFIELDS]);
         $this->assertEquals(
             'http://127.0.0.1/', (string)$instance->getRequest()->getURL()
@@ -169,7 +180,8 @@ class BaseTestCase extends \TestHelpers\TempFileTestCase {
         $request->setVerb('POST');
         $instance->callGetResponse($request, false);
         $curlOptions = $instance->getCurlOptions();
-        $this->assertArrayHasKey(CURLOPT_POST, $curlOptions);
+        $this->assertEquals('POST', $curlOptions[CURLOPT_CUSTOMREQUEST]);
+        $this->assertArrayNotHasKey(CURLOPT_POST, $curlOptions);
         $this->assertArrayNotHasKey(CURLOPT_POSTFIELDS, $curlOptions);
         $this->assertEquals(
             'http://127.0.0.1/?foo=bar',
@@ -412,13 +424,13 @@ EOF;
     public function testResponseArrayGuarantee() {
         $instance = $this->_getStub(
             array(
-                'expectResponseLength' => false,
                 'guaranteeResponseArray' => true,
                 'responseFormat' => Base::RESPONSE_FORMAT_JSON
             ),
             array('executeCurlHandle' => $this->returnValue(null))
         );
         $request = new Request('http://127.0.0.1');
+        $request->expectResponseLength(false);
         $instance->callGetResponse($request);
         $this->assertSame($instance->getResponse(), array());
         $instance->setProperty('guaranteeResponseArray', false);
@@ -427,10 +439,10 @@ EOF;
     }
     
     /**
-     * Tests that the property that controls whether an exception is thrown if
-     * a response has no length works as expected.
+     * Confirms that by default, an exception is thrown if a zero-byte response
+     * comes back.
      *
-     * @expectedException RuntimeException
+     * @expectedException GenericAPI\ResponseValidationException
      */
     public function testResponseLengthGuarantee() {
         $instance = $this->_getStub(
@@ -441,8 +453,8 @@ EOF;
     }
     
     /**
-     * Tests that the property that compares a parsed response against an
-     * expected prototype works as expected.
+     * Confirms that responses are passed along to the request object for
+     * validation.
      */
     public function testResponsePrototypeGuarantee() {
         $proto = array(
@@ -464,7 +476,6 @@ EOF;
 }
 EOF;
         $stubProperties = array(
-            'responsePrototype' => $proto,
             'responseFormat' => Base::RESPONSE_FORMAT_JSON
         );
         $instance = $this->_getStub(
@@ -472,6 +483,8 @@ EOF;
             array('executeCurlHandle' => $this->returnValue($jsonResponse))
         );
         $request = new Request('http://127.0.0.1');
+        $request->setResponseValidator($proto);
+        $request->setResponseValidationMethod(Request::VALIDATE_PROTOTYPE);
         $instance->callGetResponse($request);
         /* Adding an additional element to the response that is not found in
         the prototype doesn't throw an exception. */
@@ -496,22 +509,18 @@ EOF;
         );
         $instance->callGetResponse($request);
         // But adding an extra requirement to the prototype does
-        $stubProperties['responsePrototype']['baz'] = null;
-        $instance = $this->_getStub(
-            $stubProperties,
-            array('executeCurlHandle' => $this->returnValue($jsonResponse))
+        $proto['baz'] = null;
+        $request->setResponseValidator($proto);
+        $this->assertThrows(
+            'RuntimeException',
+            array($instance, 'callGetResponse'),
+            array($request)
         );
-        try {
-            $instance->callGetResponse($request);
-        } catch (\RuntimeException $e) {
-            return;
-        }
-        $this->fail('Expected a RuntimeException.');
     }
     
     /**
      * Tests whether it is possible to customize what happens based on a
-     * specific HTTP response.
+     * specific HTTP response code.
      */
     public function testHTTPResponseActionMap() {
         /* Ordinarily, any responses in the 400 range cause the request to
@@ -524,10 +533,14 @@ EOF;
             ))
         );
         $request = new Request('http://127.0.0.1/');
-        $this->assertTrue($instance->callGetResponse($request, false));
-        $this->assertFalse($instance->callGetResponse($request, false));
-        $this->assertFalse($instance->callGetResponse($request, false));
-        $this->assertFalse($instance->callGetResponse($request, false));
+        $instance->callGetResponse($request, false);
+        for ($i = 0; $i < 3; $i++) {
+            $this->assertThrows(
+                __NAMESPACE__ . '\TestAPIException',
+                array($instance, 'callGetResponse'),
+                array($request, false)
+            );
+        }
         $instance = $this->_getStub(
             array(
                 'httpResponseActionMap' => array(
@@ -555,13 +568,21 @@ EOF;
                 )
             )
         );
-        $this->assertTrue($instance->callGetResponse($request, false));
+        $instance->callGetResponse($request, false);
         $this->assertEquals(1, $instance->getAttemptCount());
-        $this->assertTrue($instance->callGetResponse($request, false));
+        $instance->callGetResponse($request, false);
         $this->assertEquals(3, $instance->getAttemptCount());
-        $this->assertFalse($instance->callGetResponse($request, false));
+        $this->assertThrows(
+            __NAMESPACE__ . '\TestAPIException',
+            array($instance, 'callGetResponse'),
+            array($request, false)
+        );
         $this->assertEquals(1, $instance->getAttemptCount());
-        $this->assertFalse($instance->callGetResponse($request, false));
+        $this->assertThrows(
+            __NAMESPACE__ . '\TestAPIException',
+            array($instance, 'callGetResponse'),
+            array($request, false)
+        );
         $this->assertEquals(1, $instance->getAttemptCount());
     }
     

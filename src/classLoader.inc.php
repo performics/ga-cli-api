@@ -17,7 +17,6 @@ function classLoader($className) {
 	other way: listing all the subdirectories and seeing if any of them form a
 	substring of the class name anchored at position 0. Last resort is to try
 	looking for the class name in the classes directory itself. */
-	//$paths = array(pathinfo(realpath(__FILE__), PATHINFO_DIRNAME));
 	$paths = array(__DIR__);
 	$paths = array_merge($paths, explode(':', ini_get('include_path')));
 	$validExtensions = array('.class.php', '.php');

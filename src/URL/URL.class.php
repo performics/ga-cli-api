@@ -1218,7 +1218,11 @@ class URL {
         /* Automatically URL-encode, taking care not to URL-encode meaningful
         characters. */
         $url = preg_replace_callback(
-            '/[^' . $allowedChars . ']/',
+            /* The /u flag is important in certain edge cases here. Without it,
+            URLs containing multibyte characters (e.g. accented characters in
+            UTF-8) get mangled because the callback operates on a single byte
+            at a time. */
+            '/[^' . $allowedChars . ']/u',
             function($matches) { return urlencode($matches[0]); },
             $url
         );
@@ -1227,7 +1231,7 @@ class URL {
         specific rules (e.g. the host name may only contain a subset of these).
         The internal setters for the various properties will take care of
         enforcing those rules. */
-        $regex = '/' . $schemeRegex . '[' . $allowedChars . ']+' . '$/';
+        $regex = '/' . $schemeRegex . '[' . $allowedChars . ']+' . '$/u';
         if (!preg_match($regex, $url)) {
             throw new URLInvalidArgumentException(
                 '"' . $url . '" is not a valid URL.'

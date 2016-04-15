@@ -103,6 +103,9 @@ class QueryConfiguration {
             }
             $q->setSort($sort);
         }
+        if (isset($args['limit'])) {
+            $q->setTotalResults($args['limit']);
+        }
         if (isset($args['filter'])) {
             $q->setFilter($args['filter']);
         }
@@ -199,7 +202,7 @@ class QueryConfiguration {
             $this->_formatter = new ReportFormatter();
         }
         if (isset($args['email'])) {
-            $v = new \Validator();
+            $v = new \Validator(__NAMESPACE__);
             $email = $v->email(
                 $args['email'],
                 '"' . $args['email'] . '" is not a valid email address.',

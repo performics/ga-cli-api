@@ -1120,7 +1120,6 @@ class URLTestCase extends TestHelpers\TestCase {
         $badTLDs = array(
             'oaisdfj',
             'ao.ea989ag',
-            'il',
             'mz'
         );
         foreach ($badTLDs as $tld) {
@@ -1179,6 +1178,17 @@ class URLTestCase extends TestHelpers\TestCase {
             'The expected exception was not thrown when attempting to get a ' .
             'non-existent query string parameter value.'
         );
+    }
+    
+    /**
+     * Confirms that the internal representation of URLs containing multi-byte
+     * characters is correct.
+     */
+    public function testMultibyteCharacters() {
+        $rawURL = 'http://www.foo.bar/åbcde';
+        $url = new URL($rawURL);
+        $this->assertEquals($rawURL, (string)$url);
+        $this->assertEquals($rawURL, $url->getRawURL());
     }
 }
 ?>

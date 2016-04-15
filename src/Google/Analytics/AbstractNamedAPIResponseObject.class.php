@@ -2,26 +2,13 @@
 namespace Google\Analytics;
 
 abstract class AbstractNamedAPIResponseObject extends AbstractAPIResponseObject {
-	protected static $_SUPPLEMENTAL_SETTER_DISPATCH_MODEL = array(
+	protected static $_SETTER_DISPATCH_MODEL = array(
 		'name' => 'setName'
 	);
+	protected static $_GETTER_DISPATCH_MODEL = array();
+	protected static $_MERGE_DISPATCH_MODELS = true;
+	protected static $_dispatchModelReady = false;
 	protected $_name;
-	
-	public function __construct(array $apiData = null) {
-		/* I tried damn hard to find a way to define a method in the base class
-		to handle this that would be automatically be called by every class in
-		the inheritance chain so I wouldn't have to do this boilerplate stuff,
-		but I wasn't able to solve the puzzle. */
-		if (!isset(static::$_SETTER_DISPATCH_MODEL[
-			key(self::$_SUPPLEMENTAL_SETTER_DISPATCH_MODEL)
-		])) {
-			static::$_SETTER_DISPATCH_MODEL = array_merge(
-				static::$_SETTER_DISPATCH_MODEL,
-				self::$_SUPPLEMENTAL_SETTER_DISPATCH_MODEL
-			);
-		}
-		parent::__construct($apiData);
-	}
 	
 	/**
 	 * @param string $name

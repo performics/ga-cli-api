@@ -2,6 +2,9 @@
 namespace Google\Analytics;
 
 class DateRangeGaDataQuery extends IterativeGaDataQuery {
+	protected static $_SETTER_DISPATCH_MODEL = array();
+	protected static $_GETTER_DISPATCH_MODEL = array();
+	protected static $_MERGE_DISPATCH_MODELS = true;
 	protected $_rangeStartDate;
 	protected $_rangeEndDate;
 	protected $_iterationReady = false;

@@ -4,7 +4,7 @@ namespace Google\Analytics;
 class GaData extends AbstractAPIResponseObject {
 	/* Note that this model does not call setColumnHeaders(), as that method
 	requires an additional argument. */
-	protected static $_SUPPLEMENTAL_SETTER_DISPATCH_MODEL = array(
+	protected static $_SETTER_DISPATCH_MODEL = array(
 		'containsSampledData' => 'containsSampledData',
 		'query' => 'setQuery',
 		'itemsPerPage' => 'setItemsPerPage',
@@ -17,6 +17,9 @@ class GaData extends AbstractAPIResponseObject {
 		'sampleSpace' => 'setSampleSpace',
 		'totalsForAllResults' => 'setTotals'
 	);
+	protected static $_GETTER_DISPATCH_MODEL = array();
+	protected static $_MERGE_DISPATCH_MODELS = true;
+	protected static $_dispatchModelReady = false;
 	protected $_containsSampledData;
 	protected $_query;
 	protected $_itemsPerPage;
@@ -29,18 +32,6 @@ class GaData extends AbstractAPIResponseObject {
 	protected $_sampleSize;
 	protected $_sampleSpace;
 	protected $_totals;
-	
-	public function __construct(array $apiData = null) {
-		if (!isset(static::$_SETTER_DISPATCH_MODEL[
-			key(self::$_SUPPLEMENTAL_SETTER_DISPATCH_MODEL)
-		])) {
-			static::$_SETTER_DISPATCH_MODEL = array_merge(
-				static::$_SETTER_DISPATCH_MODEL,
-				self::$_SUPPLEMENTAL_SETTER_DISPATCH_MODEL
-			);
-		}
-		parent::__construct($apiData);
-	}
 	
 	/**
 	 * @param array $queryData
@@ -210,6 +201,12 @@ class GaData extends AbstractAPIResponseObject {
 	 * @return Google\Analytics\GaDataRowCollection
 	 */
 	public function getRows() {
+		if (!$this->_rows) {
+			/* When the query did not return any results, there won't be a rows
+			key in the response, which means this object will never have been
+			set. We need to give it an empty object in this case. */
+			$this->_rows = new GaDataRowCollection(array());
+		}
 		return $this->_rows;
 	}
 	

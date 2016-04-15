@@ -612,10 +612,15 @@ EOF;
      * are themselves doubled.
      *
      * @param array $dataToFormat
-     * @param string $delimiter
+     * @param string $delimiter = ','
+     * @param string $eol = PHP_EOL
      * @return string
      */
-    public static function arrayToCSV(array $dataToFormat, $delimiter = ',') {
+    public static function arrayToCSV(
+        array $dataToFormat,
+        $delimiter = ',',
+        $eol = PHP_EOL
+    ) {
         $returnArray = array();
         foreach ($dataToFormat as $line) {
             if (!is_array($line)) {
@@ -635,7 +640,7 @@ EOF;
             }
             $returnArray[] = implode($delimiter, $line);
         }
-        return implode(PHP_EOL, $returnArray);
+        return implode($eol, $returnArray);
     }
     
     /**
@@ -854,6 +859,7 @@ EOF;
         $shortCount = count($shortArgs);
         $longCount = $longArgs ? count($longArgs) : 0;
         $mandatoryArgs = array();
+        $booleanArgs = array();
         $passableShortArgs = array();
         $passableLongArgs = array();
         $canonicalArgMap = array();
@@ -867,7 +873,12 @@ EOF;
                 $mandatory = true;
             }
             $passableLongArgs[] = $longArgs[$i];
-            $longArgs[$i] = rtrim($longArgs[$i], ':');
+            if (substr($longArgs[$i], -1) == ':') {
+                $longArgs[$i] = rtrim($longArgs[$i], ':');
+            }
+            else {
+                $booleanArgs[] = $longArgs[$i];
+            }
             /* No need to put the long forms in the map; we only need to add
             the forms that should map to something different, which will only
             be the short forms. */
@@ -880,20 +891,30 @@ EOF;
                 continue;
             }
             $mandatory = false;
+            $boolean = false;
             if ($shortArgs[$i][0] == '!') {
                 $shortArgs[$i] = substr($shortArgs[$i], 1);
                 $mandatory = true;
             }
             $passableShortArgs[] = $shortArgs[$i];
-            $cleanArg = rtrim($shortArgs[$i], ':');
+            if (substr($shortArgs[$i], -1) == ':') {
+                $cleanArg = rtrim($shortArgs[$i], ':');
+            }
+            else {
+                $cleanArg = $shortArgs[$i];
+                $boolean = true;
+            }
             if (isset($longArgs[$i]) && strlen($longArgs[$i])) {
                 $canonicalArgMap[$cleanArg] = $longArgs[$i];
             }
-            if ($mandatory) {
+            if ($mandatory || $boolean) {
                 $canonicalArg = isset($canonicalArgMap[$cleanArg]) ?
                     $canonicalArgMap[$cleanArg] : $cleanArg;
-                if (!in_array($canonicalArg, $mandatoryArgs)) {
+                if ($mandatory && !in_array($canonicalArg, $mandatoryArgs)) {
                     $mandatoryArgs[] = $canonicalArg;
+                }
+                if ($boolean && !in_array($canonicalArg, $booleanArgs)) {
+                    $booleanArgs[] = $canonicalArg;
                 }
             }
         }
@@ -931,6 +952,11 @@ EOF;
             defined('PFX_USAGE_MESSAGE'))
         {
             self::printUsage();
+        }
+        foreach ($booleanArgs as $arg) {
+            if (!isset($processedArgs[$arg])) {
+                $processedArgs[$arg] = false;
+            }
         }
         foreach ($mandatoryArgs as $arg) {
             if (!isset($processedArgs[$arg])) {
@@ -1853,7 +1879,7 @@ EOF;
      */
     public static function initializePHPExcel() {
         require_once(
-            dirname(__FILE__) . DIRECTORY_SEPARATOR . '..' .
+            __DIR__ . DIRECTORY_SEPARATOR . '..' .
             DIRECTORY_SEPARATOR . 'PHPExcel' . DIRECTORY_SEPARATOR .
             'PHPExcel.php'
         );

@@ -73,25 +73,6 @@ abstract class Base {
 	array after the parsing of the API response, even if the response is empty
 	or cannot be decoded. */
 	protected $_guaranteeResponseArray = true;
-	/* If this property is true, an instance of the registered exception type
-	will be thrown automatically if the API returns a zero-byte response. */
-	protected $_expectResponseLength = true;
-	/* If this property is set, it will be treated as a prototype against which
-	to compare the parsed API response in order to confirm that it looks like
-	it should. For example take the following prototype:
-	
-	array(
-		'meta' => null,
-		'data' => array(
-			'foo' => null,
-			'bar' => null
-		)
-	)
-	
-	This would cause an exception to be thrown if the response did not contain
-	the keys 'meta' and 'data', or if the 'data' array inside the response did
-	not contain the keys 'foo' and 'bar'. */
-	protected $_responsePrototype;
 	
 	public function __destruct() {
 		// Clean up our shared memory segment if possible
@@ -134,53 +115,6 @@ abstract class Base {
 		self::$_HTTP_RESPONSE_DEFAULT_MAP[504] = self::ACTION_REPEAT_REQUEST;
 		// And make sure failure to respond is covered
 		self::$_HTTP_RESPONSE_DEFAULT_MAP[0] = self::ACTION_REPEAT_REQUEST;
-	}
-	
-	/**
-	 * Ensures that the prototype in the argument is an array, the values in
-	 * which are either nulls or deeper arrays.
-	 *
-	 * @param array $prototype
-	 */
-	private static function _validateResponsePrototype($prototype) {
-		if (!is_array($prototype)) {
-			return false;
-		}
-		foreach ($prototype as $key => $val) {
-			if (!(is_array($val) && self::_validateResponsePrototype($val)) &&
-			    $val !== null)
-			{
-				return false;
-			}
-		}
-		return true;
-	}
-	
-	/**
-	 * Evaluates an API response (or a sub-element thereof) against the
-	 * prototype and returns a boolean value to indicate a match or a failure.
-	 *
-	 * @param array $response
-	 * @param array $prototype
-	 * @return boolean
-	 */
-	private static function _compareResponseAgainstPrototype(
-		array $response,
-		array $prototype
-	) {
-		if (!is_array($response)) {
-			return false;
-		}
-		foreach ($prototype as $key => $value) {
-			if (!array_key_exists($key, $response) || (
-				$value !== null && !self::_compareResponseAgainstPrototype(
-					$response[$key], $value
-				)))
-			{
-				return false;
-			}
-		}
-		return true;
 	}
 	
 	/**
@@ -319,14 +253,6 @@ abstract class Base {
 			which we are tracking this interval. */
 			$this->_lastRequestTimeVarName = 'req' . get_class($this);
 		}
-		if ($this->_responsePrototype !== null &&
-		    !self::_validateResponsePrototype($this->_responsePrototype))
-		{
-			throw new \UnexpectedValueException(
-				'The response prototype, if declared, must be an array, and ' .
-				'its values must be either arrays or null.'
-			);
-		}
 		foreach (self::$_HTTP_RESPONSE_DEFAULT_MAP as $code => $action) {
 			/* If the child has already registered certain actions in any of
 			these positions, skip them. */
@@ -423,36 +349,36 @@ abstract class Base {
 	 * Binds the characteristics of the request to the cURL session.
 	 */
 	private function _bindRequestToCurlHandle() {
-		if (API_VERBOSE_REQUESTS) {
-			echo 'Request URL is ' . $this->_request->getURL() . PHP_EOL;
-		}
 		$this->_setCurlOption($this->_request->getCurlOptions());
-		if (API_VERBOSE_REQUESTS && $this->_request->getVerb() == 'POST') {
-			echo 'POST data is as follows: ';
-			$postData = $this->_request->getPostParameters();
-			if (is_array($postData)) {
-				echo '(' . PHP_EOL;
-				foreach ($postData as $key => $val) {
-					$len = strlen($val);
-					if ($len > 160) {
-						$val = substr($val, 0, 133) . '...(' . ($len - 133)
-							 . ' byte(s) truncated)';
+		if (API_VERBOSE_REQUESTS) {
+			$this->_setCurlOption(CURLINFO_HEADER_OUT, true);
+			if (isset($this->_curlOptions[CURLOPT_POSTFIELDS])) {
+				echo 'Request payload:' . PHP_EOL;
+				$payload = $this->_curlOptions[CURLOPT_POSTFIELDS];
+				if (is_array($payload)) {
+					echo '(' . PHP_EOL;
+					foreach ($payload as $key => $val) {
+						$len = strlen($val);
+						if ($len > 160) {
+							$val = substr($val, 0, 133) . '...(' . ($len - 133)
+								 . ' byte(s) truncated)';
+						}
+						echo "\t" . $key . ': ' . $val . PHP_EOL;
 					}
-					echo "\t" . $key . ': ' . $val . PHP_EOL;
-				}
-				echo ')';
-			}
-			else {
-				$len = strlen($postData);
-				if ($len > 160) {
-					echo substr($postData, 0, 133) . '...('
-					   . ($len - 133) . ' byte(s) truncated)';
+					echo ')';
 				}
 				else {
-					echo $postData;
+					$len = strlen($payload);
+					if ($len > 160) {
+						echo substr($payload, 0, 133) . '...('
+						   . ($len - 133) . ' byte(s) truncated)';
+					}
+					else {
+						echo $payload;
+					}
 				}
+				echo PHP_EOL;
 			}
-			echo PHP_EOL;
 		}
 		$url = $this->_request->getURL();
 		if ($url->getScheme() == 'https') {
@@ -489,7 +415,7 @@ abstract class Base {
 	 */
 	protected function _executeCurlHandle() {
 		if (API_DEBUG) {
-			echo "Debug mode active; assuming successful response.\n";
+			echo 'Debug mode active; assuming successful response.' . PHP_EOL;
 			return true;
 		}
 		return curl_exec($this->_curlHandle);
@@ -510,128 +436,16 @@ abstract class Base {
 	}
 	
 	/**
-	 * Performs a request, which may involve more than one call (e.g. if there
-	 * is a redirect involved or the request fails on the first attempt and is
-	 * subsequently retried). This method returns false if the HTTP status code
-	 * of the final call was anything other than 200, unless it was handled by
-	 * mapping an HTTP status to an action.
-	 *
-	 * @param GenericAPI\Request $request
-	 * @param boolean $parse = true
-	 * @return boolean
+	 * This method is called at the point when no more calls are to be made to
+	 * the remote service (either because it returned a response code of 200 or
+	 * it was called the maximum allowed number of times without a successful
+	 * response). Its function should be to throw an exception if an error took
+	 * place and to do nothing otherwise. The question of whether an error took
+	 * place or not is dependent on the service; often it will probably require
+	 * looking both at the HTTP response code and checking for keys in the
+	 * parsed
 	 */
-	protected function _getResponse(Request $request, $parse = true) {
-		if (!$this->_instanceSetupComplete) {
-			$this->_setupInstance();
-		}
-		if ($this->_requestDelayInterval) {
-			$this->_mutex->acquire();
-			$timeSinceLast = \PFXUtils::millitime() - $this->_shmSegment->getVar(
-				$this->_lastRequestTimeVarName, 0
-			);
-			if ($timeSinceLast < $this->_requestDelayInterval) {
-				usleep(($this->_requestDelayInterval - $timeSinceLast) * 1000);
-			}
-			$this->_mutex->release();
-		}
-		$this->_resetState();
-		$this->_request = $request;
-		for ($i = 0; $i < $this->_responseTries; $i++) {
-			/* This needs to be reinitialized on each loop iteration, or else
-			we will end up returning false when the first attempt fails but a
-			subsequent attempt succeeds; this is because
-			$this->_determineResponseAction() will only modify this variable's
-			value if it is null. */
-			$rtnVal = null;
-			$this->_attemptCount++;
-			if (API_VERBOSE_REQUESTS) {
-				echo 'Executing attempt ' . $this->_attemptCount . ' of '
-				   . $this->_responseTries . '...' . PHP_EOL;
-			}
-			if (!$this->_requestBound) {
-				$this->_bindRequestToCurlHandle();
-			}
-			$response = $this->_executeCurlHandle();
-			/* I didn't used to set the raw response property until this loop
-			was finished, but we need it in order to make the call to
-			$this->_determineResponseAction() work correctly. In order to
-			preserve the legacy behavior, I'm going to leave the property null
-			if we get a zero-byte response. */
-			if (strlen($response)) {
-				$this->_responseRaw = $response;
-			}
-			if ($this->_requestDelayInterval) {
-				// Store last request timestamp down to the millisecond
-				$this->_shmSegment->putVar(
-					$this->_lastRequestTimeVarName, \PFXUtils::millitime()
-				);
-			}
-			$this->_responseCode = $this->_getLastHTTPResponse();
-			if (API_VERBOSE_REQUESTS) {
-				echo 'Response code was ' . $this->_responseCode
-				   . '; received ' . strlen($response) . ' bytes' . PHP_EOL;
-			}
-			$action = $this->_determineResponseAction($rtnVal);
-			if ($action === null) {
-				throw new $this->_EXCEPTION_TYPE(
-					'Failed to determine response action (response code was ' .
-					$this->_responseCode . ').'
-				);
-			}
-			if ($action == self::ACTION_URL_MOVED) {
-				/* This condition throws an exception so it's easier to know
-				that URLs in library code need to be updated. Note that this
-				only takes effect if the request is not set to redirect
-				automatically or if the number of redirects emitted by the
-				remote service exceeds 10. */
-				$headers = $this->getResponseHeaderAsAssociativeArray();
-				if (isset($headers['Location'])) {
-					$message = 'The remote service reports that this resource '
-					         . 'has moved to ' . $headers['Location']
-							 . ' (response code was ' . $this->_responseCode
-							 . ').';
-				}
-				else {
-					$message = 'Got response code ' . $this->_responseCode
-					         . ' from remote service.';
-				}
-				throw new $this->_EXCEPTION_TYPE($message);
-			}
-			if ($action != self::ACTION_REPEAT_REQUEST) {
-				break;
-			}
-			sleep($this->_repeatPauseInterval);
-		}
-		/* In order for certain things to work properly (e.g. the storing of
-		raw SERP source code from the SEMRush API), we need to parse the
-		response before we store the raw response. However, if for some reason
-		the parse code throws an exception, we don't want to die without at
-		least attempting to store the raw data. Therefore, we'll catch any
-		exceptions here, then re-throw them after storing the raw response. */
-		$rethrowException = null;
-		if ($parse) {
-			try {
-				$this->_parseResponse();
-			} catch (\Exception $e) {
-				$rethrowException = $e;
-			}
-		}
-		if (strlen($this->_responseRaw)) {
-			if ($this->_transferFile) {
-				$this->_storeRawResponse();
-			}
-			if ($rethrowException) {
-				throw $rethrowException;
-			}
-		}
-		elseif ($this->_expectResponseLength) {
-			throw new $this->_EXCEPTION_TYPE(
-				'Got empty response from API (last HTTP response code was ' .
-				$this->_responseCode . ').'
-			);
-		}
-		return $rtnVal;
-	}
+	abstract protected function _handleError();
 	
 	/** 
 	 * This method will be called immediately after every call to the remote
@@ -642,32 +456,16 @@ abstract class Base {
 	 * the raw response and the HTTP response code, but not the parsed
 	 * response. It should return one of the GenericAPI\Base::ACTION_*
 	 * constants, or null, in which case the HTTP response code will be
-	 * examined as usual in order to determine the course of action. This
-	 * method also has the opportunity to set the boolean value that
-	 * $this->_getResponse() will return.
+	 * examined as usual in order to determine the course of action.
 	 *
-	 * @param boolean &$rtnVal
 	 * @return int
 	 */
-	protected function _determineResponseAction(&$rtnVal) {
+	protected function _determineResponseAction() {
 		if (array_key_exists(
 			$this->_responseCode, $this->_httpResponseActionMap
 		)) {
-			$action = $this->_httpResponseActionMap[$this->_responseCode];
+			return $this->_httpResponseActionMap[$this->_responseCode];
 		}
-		else {
-			$action = null;
-		}
-		// Only set the return value if the subclass hasn't already
-		if ($rtnVal === null) {
-			if ($this->_responseCode < 400) {
-				$rtnVal = true;
-			}
-			else {
-				$rtnVal = false;
-			}
-		}
-		return $action;
 	}
 	
 	/**
@@ -683,15 +481,6 @@ abstract class Base {
 		$this->_responseParsed = call_user_func_array(
 			$this->_parseCallback, $this->_parseCallbackArgs
 		);
-		if ($this->_responsePrototype !== null &&
-		    !self::_compareResponseAgainstPrototype(
-				$this->_responseParsed, $this->_responsePrototype
-			))
-		{
-			throw new $this->_EXCEPTION_TYPE(
-				'The response failed to match the prototype.'
-			);
-		}
 		if ($this->_guaranteeResponseArray &&
 		    !is_array($this->_responseParsed))
 		{
@@ -755,6 +544,134 @@ abstract class Base {
 		if ($useLocalMutex) {
 			$this->_mutex->release();
 		}
+	}
+	
+	/**
+	 * Subclasses may hook into this method to perform any actions that must be
+	 * performed after an API request regardless of whether it succeeded or
+	 * not.
+	 */
+	protected function _finalizeRequest() {}
+	
+	/**
+	 * Performs a request, which may involve more than one call (e.g. if there
+	 * is a redirect involved or the request fails on the first attempt and is
+	 * subsequently retried). This method returns false if the HTTP status code
+	 * of the final call was anything other than 200, unless it was handled by
+	 * mapping an HTTP status to an action.
+	 *
+	 * @param GenericAPI\Request $request
+	 * @param boolean $parse = true
+	 * @return boolean
+	 */
+	protected function _getResponse(Request $request, $parse = true) {
+		if (!$this->_instanceSetupComplete) {
+			$this->_setupInstance();
+		}
+		if ($this->_requestDelayInterval) {
+			$this->_mutex->acquire();
+			$timeSinceLast = \PFXUtils::millitime() - $this->_shmSegment->getVar(
+				$this->_lastRequestTimeVarName, 0
+			);
+			if ($timeSinceLast < $this->_requestDelayInterval) {
+				usleep(($this->_requestDelayInterval - $timeSinceLast) * 1000);
+			}
+			$this->_mutex->release();
+		}
+		$this->_resetState();
+		$this->_request = $request;
+		for ($i = 0; $i < $this->_responseTries; $i++) {
+			$this->_attemptCount++;
+			if (API_VERBOSE_REQUESTS) {
+				echo 'Executing attempt ' . $this->_attemptCount . ' of '
+				   . $this->_responseTries . '...' . PHP_EOL;
+			}
+			if (!$this->_requestBound) {
+				$this->_bindRequestToCurlHandle();
+			}
+			$response = $this->_executeCurlHandle();
+			if (API_VERBOSE_REQUESTS) {
+				echo 'Request trace:' . PHP_EOL . curl_getinfo(
+					$this->_curlHandle, CURLINFO_HEADER_OUT
+				) . PHP_EOL . PHP_EOL;
+			}
+			/* I didn't used to set the raw response property until this loop
+			was finished, but we need it in order to make the call to
+			$this->_determineResponseAction() work correctly. In order to
+			preserve the legacy behavior, I'm going to leave the property null
+			if we get a zero-byte response. */
+			if (strlen($response)) {
+				$this->_responseRaw = $response;
+			}
+			if ($this->_requestDelayInterval) {
+				// Store last request timestamp down to the millisecond
+				$this->_shmSegment->putVar(
+					$this->_lastRequestTimeVarName, \PFXUtils::millitime()
+				);
+			}
+			$this->_responseCode = $this->_getLastHTTPResponse();
+			if (API_VERBOSE_REQUESTS) {
+				echo 'Response code was ' . $this->_responseCode
+				   . '; received ' . strlen($response) . ' bytes' . PHP_EOL;
+			}
+			$action = $this->_determineResponseAction();
+			if ($action === null) {
+				throw new $this->_EXCEPTION_TYPE(
+					'Failed to determine response action (response code was ' .
+					$this->_responseCode . ').'
+				);
+			}
+			if ($action == self::ACTION_URL_MOVED) {
+				/* This condition throws an exception so it's easier to know
+				that URLs in library code need to be updated. Note that this
+				only takes effect if the request is not set to redirect
+				automatically or if the number of redirects emitted by the
+				remote service exceeds 10. */
+				$headers = $this->getResponseHeaderAsAssociativeArray();
+				if (isset($headers['Location'])) {
+					$message = 'The remote service reports that this resource '
+					         . 'has moved to ' . $headers['Location']
+							 . ' (response code was ' . $this->_responseCode
+							 . ').';
+				}
+				else {
+					$message = 'Got response code ' . $this->_responseCode
+					         . ' from remote service.';
+				}
+				throw new $this->_EXCEPTION_TYPE($message);
+			}
+			if ($action != self::ACTION_REPEAT_REQUEST) {
+				break;
+			}
+			sleep($this->_repeatPauseInterval);
+		}
+		/* In order for certain things to work properly (e.g. the storing of
+		raw SERP source code from the SEMRush API), we need to parse the
+		response before we store the raw response. However, if for some reason
+		the parse code throws an exception, we don't want to die without at
+		least attempting to store the raw data. Therefore, we'll catch any
+		exceptions here, then re-throw them after storing the raw response. */
+		$rethrowException = null;
+		if ($parse) {
+			try {
+				$this->_parseResponse();
+			} catch (\Exception $e) {
+				$rethrowException = $e;
+			}
+		}
+		if (strlen($this->_responseRaw)) {
+			if ($this->_transferFile) {
+				$this->_storeRawResponse();
+			}
+		}
+		$this->_finalizeRequest();
+		if ($rethrowException) {
+			throw $rethrowException;
+		}
+		$this->_handleError();
+		$request->validateResponse(
+			$this->_responseRaw, $this->_responseParsed
+		);
 	}
 	
 	/**
@@ -848,6 +765,8 @@ abstract class Base {
 	/**
 	 * Returns the array of cURL options that was effective for the last
 	 * request.
+	 *
+	 * @return array
 	 */
 	public function getCurlOptions() {
 		return $this->_curlOptions;

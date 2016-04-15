@@ -2,6 +2,9 @@
 namespace Google\Analytics;
 
 abstract class IterativeGaDataQuery extends GaDataQuery {
+	protected static $_SETTER_DISPATCH_MODEL = array();
+	protected static $_GETTER_DISPATCH_MODEL = array();
+	protected static $_MERGE_DISPATCH_MODELS = true;
 	protected $_iterativeName = 'Iteration';
 	
 	/**

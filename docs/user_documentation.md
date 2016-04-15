@@ -89,6 +89,10 @@ A string describing how the report should be sorted. This should be expressed as
 
 `city,browser,-sessions`
 
+#### `limit`
+
+The maximum total number of results to return for the query.
+
 #### `filter`
 
 A string describing how the Google Analytics API should filter the report data. The format of a filter expression as understood by the Performics Google Analytics API Interface matches that described in [Google's API documentation](https://developers.google.com/analytics/devguides/reporting/core/v3/reference#filters), with the exception that this application does not require the use of the "ga:" prefix before dimension and metric names, and operators should not be URL-encoded.

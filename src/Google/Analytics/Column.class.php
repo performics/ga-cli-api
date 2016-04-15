@@ -2,7 +2,7 @@
 namespace Google\Analytics;
 
 class Column extends AbstractNamedAPIResponseObject {
-	protected static $_SUPPLEMENTAL_SETTER_DISPATCH_MODEL = array(
+	protected static $_SETTER_DISPATCH_MODEL = array(
 		'attributes' => array(
 			'replacedBy' => 'setReplacementColumn',
 			'type' => 'setType',
@@ -19,6 +19,9 @@ class Column extends AbstractNamedAPIResponseObject {
 			'allowedInSegments' => 'isAllowedInSegments'
 		)
 	);
+	protected static $_GETTER_DISPATCH_MODEL = array();
+	protected static $_MERGE_DISPATCH_MODELS = true;
+	protected static $_dispatchModelReady = false;
 	protected $_replacementColumn;
 	protected $_type;
 	protected $_dataType;
@@ -33,18 +36,6 @@ class Column extends AbstractNamedAPIResponseObject {
 	protected $_maxTemplateIndexPremium;
 	protected $_allowedInSegments = false;
 	private $_total;
-	
-	public function __construct(array $apiData = null) {
-		if (!isset(static::$_SETTER_DISPATCH_MODEL[
-			key(self::$_SUPPLEMENTAL_SETTER_DISPATCH_MODEL)
-		])) {
-			static::$_SETTER_DISPATCH_MODEL = array_merge(
-				static::$_SETTER_DISPATCH_MODEL,
-				self::$_SUPPLEMENTAL_SETTER_DISPATCH_MODEL
-			);
-		}
-		parent::__construct($apiData);
-	}
 	
 	/**
 	 * @param string $id

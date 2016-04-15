@@ -896,6 +896,16 @@ EOF;
             array('a', 'b:'),
             array(null, 'bee:', 'cee:')
         ));
+        /* If an available boolean argument is not supplied, it should
+        automatically be resolved as false. */
+        $expected = array('foo' => true, 'bar' => false);
+        $this->assertEquals($expected, $this->runCollapseArgsCommand(
+            '-f', array('f', 'b'), array('foo', 'bar')
+        ));
+        $expected = array('a' => false, 'b' => true, 'c' => false);
+        $this->assertEquals($expected, $this->runCollapseArgsCommand(
+            '-b', array('a', 'b', 'c')
+        ));
         // Multiple invocations should end up in an array
         $expected = array('f' => array('bar', 'baz'), 'a' => 'b');
         $this->assertEquals($expected, $this->runCollapseArgsCommand(

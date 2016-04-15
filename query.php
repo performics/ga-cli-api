@@ -8,6 +8,7 @@ Usage: {FILE} --profile-name=<profile name>|--profile-id=<profile ID>
 {PAD} --email=<email address>|--file=<output file>
 {PAD} [--dimension=<dimension name>]
 {PAD} [--sort=[-]<dimension or metric name>]
+{PAD} [--limit=<maximum number of rows to fetch>]
 {PAD} [--filter=<filter string>]
 {PAD} [--segment=<segment string>]
 {PAD} [--split-queries-by=day|week|month|year]
@@ -95,7 +96,7 @@ This argument is ignored if specified when running only a single report.
 
 EOF
 );
-require_once('bootstrap.php');
+require_once(__DIR__ . DIRECTORY_SEPARATOR . 'bootstrap.php');
 try {
     try {
         $args = PFXUtils::collapseArgs(
@@ -110,6 +111,7 @@ try {
                 'file:',
                 'dimension:',
                 'sort:',
+                'limit:',
                 'filter:',
                 'segment:',
                 'split-queries-by:',

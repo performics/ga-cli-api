@@ -65,6 +65,9 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 		'start-index' => 'setStartIndex',
 		'max-results' => 'setMaxResults'
 	);
+	protected static $_GETTER_DISPATCH_MODEL = array();
+	protected static $_MERGE_DISPATCH_MODELS = true;
+	protected static $_dispatchModelReady = false;
 	protected $_api;
 	protected $_profile;
 	/* Since we lazily load the profile object, we need separate properties to
@@ -81,6 +84,7 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	protected $_samplingLevel;
 	protected $_startIndex = 1;
 	protected $_maxResults;
+	protected $_totalResults;
 	// This property is for satisfying the Iterator requirements
 	protected $_index = 0;
 	// This is used by $this->iteration() when formatting the start date
@@ -431,11 +435,24 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
+	 * Sets the maximum number of results to request per query iteration.
+	 *
 	 * @param int $maxResults
 	 */
 	public function setMaxResults($maxResults) {
 		$this->_maxResults = self::$_validator->number(
-			$maxResults, null, \Validator::ASSERT_INT_DEFAULT
+			$maxResults, null, \Validator::ASSERT_INT_DEFAULT, null, 10000
+		);
+	}
+	
+	/**
+	 * Sets the maximum total number of results to request.
+	 *
+	 * @param int $totalResults
+	 */
+	public function setTotalResults($totalResults) {
+		$this->_totalResults = self::$_validator->number(
+			$totalResults, null, \Validator::ASSERT_INT_DEFAULT
 		);
 	}
 	
@@ -584,6 +601,8 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 	}
 	
 	/**
+	 * Returns the maximum number of rows to request per query iteration.
+	 *
 	 * @return int
 	 */
 	public function getMaxResults() {
@@ -591,6 +610,15 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 			return GOOGLE_ANALYTICS_API_PAGE_SIZE;
 		}
 		return $this->_maxResults;
+	}
+	
+	/**
+	 * Returns the maximum total number of rows to fetch.
+	 *
+	 * @return int
+	 */
+	public function getTotalResults() {
+		return $this->_totalResults;
 	}
 	
 	/**
@@ -650,6 +678,13 @@ class GaDataQuery extends AbstractNamedAPIResponseObject implements IQuery {
 		foreach ($query as $key => $value) {
 			$keys[] = $keys;
 			$values[] = $value;
+		}
+		/* This doesn't get submitted to the API, but it does differentiate the
+		query. */
+		$totalResults = $this->getTotalResults();
+		if ($totalResults !== null) {
+			$keys[] = 'total-results';
+			$values[] = $totalResults;
 		}
 		array_multisort($keys, $values);
 		return md5(implode('|', $values), true);

@@ -16,12 +16,7 @@ class API extends \Google\ServiceAccountAPI {
         'GOOGLE_ANALYTICS_API_METADATA_CACHE_DURATION' => 86400,
         'GOOGLE_ANALYTICS_API_ACCOUNTS_CACHE_DURATION' => 86400,
         'GOOGLE_ANALYTICS_API_AUTOZIP_THRESHOLD' => 1048576,
-        /* Since this class relies on our OAuth backend to make its
-        connections, we can expect that if we're going to be using a database,
-        these constants will be defined. */
-        'OAUTH_DB_DSN' => null,
-        'OAUTH_DB_USER' => null,
-        'OAUTH_DB_PASSWORD' => null
+        'PFX_CA_BUNDLE' => null
     );
     private static $_SETTING_TESTS = array(
         'GOOGLE_ANALYTICS_API_AUTH_SCOPE' => 'url',
@@ -35,12 +30,9 @@ class API extends \Google\ServiceAccountAPI {
         'GOOGLE_ANALYTICS_API_METADATA_CACHE_DURATION' => 'integer',
         'GOOGLE_ANALYTICS_API_ACCOUNTS_CACHE_DURATION' => 'integer',
         'GOOGLE_ANALYTICS_API_AUTOZIP_THRESHOLD' => 'integer',
-        'OAUTH_DB_DSN' => '?string',
-        'OAUTH_DB_USER' => '?string',
-        'OAUTH_DB_PASSWORD' => '?string'
+        'PFX_CA_BUNDLE' => '?file'
     );
     private static $_DB_STATEMENTS = array();
-    private static $_dbConn;
     private static $_staticPropsReady = false;
     /* self::$_dimensions and self::$_metrics are indexed by name. The
     corresponding name lists only contain the non-deprecated columns. */
@@ -62,6 +54,7 @@ class API extends \Google\ServiceAccountAPI {
     private static $_webPropertiesByID = array();
     private static $_profilesByName = array();
     private static $_profilesByID = array();
+    protected static $_apiMutex;
     private $_bypassAccountCache = false;
     private $_bypassColumnCache = false;
     private $_activeQuery;
@@ -76,11 +69,10 @@ class API extends \Google\ServiceAccountAPI {
             if (!self::$_staticPropsReady) {
                 self::_initStaticProperties();
             }
-            parent::__construct();
             $this->_logger = new \Logger(
                 GOOGLE_ANALYTICS_API_LOG_FILE,
                 GOOGLE_ANALYTICS_API_LOG_EMAIL,
-                $this->_mutex
+                self::$_apiMutex
             );
             // It's only necessary to register a logger once
             if (!\LoggingExceptions\Exception::hasLogger()) {
@@ -97,40 +89,20 @@ class API extends \Google\ServiceAccountAPI {
         }
     }
     
-    private static function _initStaticProperties() {
+    protected static function _initStaticProperties() {
+        parent::_initStaticProperties();
         \PFXUtils::validateSettings(self::$_SETTINGS, self::$_SETTING_TESTS);
-        if (OAUTH_DB_DSN) {
-            self::$_dbConn = \PFXUtils::getDBConn(
-                OAUTH_DB_DSN, OAUTH_DB_USER, OAUTH_DB_PASSWORD
-            );
-            self::_prepareDBStatements();
-        }
         if (PFX_CA_BUNDLE) {
             self::_registerSSLCertificate(PFX_CA_BUNDLE);
         }
+        if (self::$_dbConn) {
+            self::_prepareDBStatements();
+        }
+        self::$_apiMutex = new \Mutex(__CLASS__);
         self::$_staticPropsReady = true;
     }
     
     private static function _prepareDBStatements() {
-        self::$_DB_STATEMENTS['google_analytics_api_fetch_log'] = array();
-        $q = <<<EOF
-INSERT INTO google_analytics_api_fetch_log
-(entity, etag, result_count, fetch_date)
-VALUES
-(:entity, :etag, :result_count, UNIX_TIMESTAMP())
-EOF;
-        self::$_DB_STATEMENTS[
-            'google_analytics_api_fetch_log'
-        ]['insert'] = self::$_dbConn->prepare($q);
-        $q = <<<EOF
-SELECT * FROM google_analytics_api_fetch_log
-WHERE entity = :entity
-ORDER BY id DESC
-LIMIT 1
-EOF;
-        self::$_DB_STATEMENTS[
-            'google_analytics_api_fetch_log'
-        ]['select'] = self::$_dbConn->prepare($q);
         self::$_DB_STATEMENTS['google_analytics_api_account_summaries'] = array();
         $q = <<<EOF
 SELECT * FROM google_analytics_api_account_summaries
@@ -262,22 +234,6 @@ EOF;
         self::$_DB_STATEMENTS['google_analytics_api_columns'][
             'insert'
         ] = self::$_dbConn->prepare($q);
-    }
-    
-    /**
-     * Gets the most recent entry for a given entity from the fetch log as an
-     * associative array (or false if there is no such entry).
-     *
-     * @param string $entity
-     * @return array, boolean
-     */
-    private static function _getLastFetchData($entity) {
-        $stmt = self::$_DB_STATEMENTS[
-            'google_analytics_api_fetch_log'
-        ]['select'];
-        $stmt->bindValue(':entity', $entity, \PDO::PARAM_STR);
-        $stmt->execute();
-        return $stmt->fetch(\PDO::FETCH_ASSOC);
     }
     
     /**
@@ -493,25 +449,11 @@ EOF;
                         }
                     }
                     if ($newETag) {
-                        $stmt = self::$_DB_STATEMENTS[
-                            'google_analytics_api_fetch_log'
-                        ]['insert'];
-                        $stmt->bindValue(
-                            ':entity',
+                        self::_storeFetchData(
                             'google_analytics_api_columns',
-                            \PDO::PARAM_STR
-                        );
-                        $stmt->bindValue(
-                            ':etag',
-                            $newETag,
-                            \PDO::PARAM_STR
-                        );
-                        $stmt->bindValue(
-                            ':result_count',
                             count($columns),
-                            \PDO::PARAM_INT
+                            $newETag
                         );
-                        $stmt->execute();
                     }
                 }
                 if (!$columns) {
@@ -775,19 +717,10 @@ EOF;
                         'visible = 0 WHERE gid NOT IN (' .
                         implode(', ', $visibleProfiles) . ')'
                     );
-                    $stmt = self::$_DB_STATEMENTS[
-                        'google_analytics_api_fetch_log'
-                    ]['insert'];
-                    $stmt->bindValue(
-                        ':entity',
+                    self::_storeFetchData(
                         'google_analytics_api_account_summaries',
-                        \PDO::PARAM_STR
+                        count($accounts)
                     );
-                    $stmt->bindValue(':etag', null, \PDO::PARAM_NULL);
-                    $stmt->bindValue(
-                        ':result_count', count($accounts), \PDO::PARAM_INT
-                    );
-                    $stmt->execute();
                 }
                 else {
                     $accounts = array();
@@ -904,10 +837,46 @@ EOF;
         }
     }
     
+    /**
+     * Returns an object or an array of objects from the parsed response.
+     *
+     * @return array, Google\Analytics\AbstractAPIResponseObject
+     */
+    protected function _castResponse() {
+        if (array_key_exists('nextLink', $this->_responseParsed)) {
+            try {
+                $this->_nextRequest = clone $this->_request;
+                $this->_nextRequest->setURL(new \URL(
+                    $this->_responseParsed['nextLink']
+                ));
+            } catch (\URLException $e) {
+                throw new UnexpectedValueException(
+                    'Caught error while parsing paginated URL.', null, $e
+                );
+            }
+        }
+        else {
+            $this->_nextRequest = null;
+        }
+        if (array_key_exists('items', $this->_responseParsed)) {
+            $items = array();
+            foreach ($this->_responseParsed['items'] as $item) {
+                $items[] = APIResponseObjectFactory::create($item);
+            }
+            return $items;
+        }
+        return APIResponseObjectFactory::create($this->_responseParsed);
+    }
+    
     /** 
      * Reacts to an error condition reported by the API.
      */
     protected function _handleError() {
+        if ($this->_responseCode < 400 && !\PFXUtils::nestedArrayKeyExists(
+            array('error', 'errors'), $this->_responseParsed
+        )) {
+            return;
+        }
         $this->_activeQuery = null;
         $reason = null;
         $message = null;
@@ -1034,19 +1003,27 @@ EOF;
     /**
      * Performs a Google Analytics query with the given
      * Google\Analytics\GaDataQuery object and returns the result as a
-     * Google\Analytics\GaData object.
+     * Google\Analytics\GaData object, or boolean false if the query's data
+     * has been exhausted.
      *
      * @param Google\Analytics\GaDataQuery $query
-     * @return Google\Analytics\GaData
+     * @return Google\Analytics\GaData, boolean
      */
     public function query(GaDataQuery $query) {
         $query->setAPIInstance($this);
+        $totalResults = $query->getTotalResults();
         do {
             /* If the given query is already active, meaning that we have made
             a call for its first page of results already, don't pass any
             arguments to $this->_makeRequest(). */
             $hash = $query->getHash();
             if ($hash == $this->_activeQuery) {
+                if ($totalResults !== null && $this->_totalRows >= $totalResults)
+                {
+                    // No reason to continue
+                    $response = false;
+                    break;
+                }
                 $response = $this->_makeRequest();
             }
             else {
@@ -1088,9 +1065,18 @@ EOF;
             );
             // I also want the rows object to be aware of the columns object
             $rows = $response->getRows();
-            $this->_totalRows += count($rows);
-            if ($rows) {
-                $rows->setColumnHeaders($response->getColumnHeaders());
+            $rows->setColumnHeaders($response->getColumnHeaders());
+            $rowCount = count($rows);
+            if ($rowCount) {
+                $this->_totalRows += $rowCount;
+                if ($totalResults !== null) {
+                    $surplus = $this->_totalRows - $totalResults;
+                    if ($surplus > 0) {
+                        /* Even though we already got the data, behave as we
+                        were asked and lop off the extra rows. */
+                        $rows->discard($surplus);
+                    }
+                }
             }
         }
         else {

@@ -72,7 +72,7 @@ class RequestTestCase extends \TestHelpers\TestCase {
         // This is true even if the verb isn't GET
         $request1->setVerb('POST');
         // Calling this method implicitly sets the verb to POST
-        $request2->setPostParameters(array('baz' => 'boo'));
+        $request2->setPayload(array('baz' => 'boo'));
         $this->assertTrue($request1->getURL()->compare($request2->getURL()));
         /* It's also possible to modify GET parameters after the fact, which
         should have the same effect no matter how the instance was constructed.
@@ -116,18 +116,35 @@ class RequestTestCase extends \TestHelpers\TestCase {
     }
     
     /**
-     * Confirms that it is possible to set arbitrary HTTP verbs, unless the
-     * instance contains POST parameters already.
+     * Confirms that it is possible to set arbitrary HTTP verbs.
      */
     public function testVerbs() {
         $request = new Request('http://127.0.0.1');
         $this->assertEquals('GET', $request->getVerb());
         $request->setVerb('DELETE');
         $this->assertEquals('DELETE', $request->getVerb());
-        $request->setPostParameters(array('foo' => 'bar'));
+        /* Setting a payload implicitly sets the HTTP verb to 'POST' unless
+        another one has been set. */
+        $request = new Request('http://127.0.0.1');
+        $args = array('foo' => 'bar');
+        $request->setPayload($args);
         $this->assertEquals('POST', $request->getVerb());
+        $request->setVerb('PATCH');
+        $this->assertEquals('PATCH', $request->getVerb());
+        $this->assertEquals($args, $request->getPayload());
+        // We can set the verb and the payload in the opposite order too
+        $request = new Request('http://127.0.0.1');
+        $request->setVerb('BUTT');
+        $payload = json_encode($args);
+        $request->setPayload($payload);
+        $this->assertEquals('BUTT', $request->getVerb());
+        $this->assertEquals($payload, $request->getPayload());
+        /* But if we try to force the verb to GET, we'll have a problem when we
+        try to get the cURL options, which is the point when conflicts are
+        resolved. */
+        $request->setVerb('GET');
         $this->assertThrows(
-            'LogicException', array($request, 'setVerb'), array('GET')
+            'LogicException', array($request, 'getCurlOptions')
         );
     }
     
@@ -216,28 +233,31 @@ class RequestTestCase extends \TestHelpers\TestCase {
         $this->assertTrue($request->getURL()->compare(
             'http://127.0.0.1/?bar=baz&name=dingus&occupation=prostman'
         ));
-        // If the verb is POST, persistent parameters go in the POST payload
+        /* If the verb is POST, persistent parameters go in the POST payload,
+        but this is only resolved within the cURL options. */
         $request->setVerb('POST');
         $this->assertEquals(
             'http://127.0.0.1/?bar=baz', (string)$request->getURL()
         );
+        $curlOpts = $request->getCurlOptions();
         $this->assertEquals(
             array('name' => 'dingus', 'occupation' => 'prostman'),
-            $request->getPostParameters()
+            $curlOpts[CURLOPT_POSTFIELDS]
         );
         /* Attempting to mix string data and persistent POST parameters throws
         an exception. */
         $postString = 'asdfasdfasdf';
-        $request->setPostParameters($postString);
+        $request->setPayload($postString);
         $this->assertThrows(
-            'LogicException', array($request, 'getPostParameters')
+            'LogicException', array($request, 'getCurlOptions')
         );
         // For this reason, it is possible to force those parameters to the GET
         $request->forcePersistentParametersToGet(true);
         $this->assertTrue($request->getURL()->compare(
             'http://127.0.0.1/?bar=baz&name=dingus&occupation=prostman'
         ));
-        $this->assertEquals($postString, $request->getPostParameters());
+        $curlOpts = $request->getCurlOptions();
+        $this->assertEquals($postString, $curlOpts[CURLOPT_POSTFIELDS]);
         /* Persistent parameters may be selectively overridden, whether or not
         they are in the GET or the POST. */
         $request = new PersistentParameterRequest('127.0.0.1/?bar=baz');
@@ -246,12 +266,13 @@ class RequestTestCase extends \TestHelpers\TestCase {
             'http://127.0.0.1/?bar=baz&name=dingus&occupation=prilot'
         ));
         $request = new PersistentParameterRequest('http://foo.bar/api');
-        $request->setPostParameters(
+        $request->setPayload(
             array('occupation' => 'ump', 'is_hunk' => true)
         );
+        $curlOpts = $request->getCurlOptions();
         $this->assertEquals(
             array('name' => 'dingus', 'occupation' => 'ump', 'is_hunk' => true),
-            $request->getPostParameters()
+            $curlOpts[CURLOPT_POSTFIELDS]
         );
     }
     
@@ -261,6 +282,7 @@ class RequestTestCase extends \TestHelpers\TestCase {
     public function testCurlOptions() {
         $request = new Request('foo.bar/api', array('composer' => 'brahms'));
         $expected = array(
+            CURLOPT_CUSTOMREQUEST => 'GET',
             CURLOPT_URL => 'http://foo.bar/api?composer=brahms',
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS => 10
@@ -274,17 +296,89 @@ class RequestTestCase extends \TestHelpers\TestCase {
         $expected[CURLOPT_CUSTOMREQUEST] = 'FROWN';
         $this->assertEquals($expected, $request->getCurlOptions());
         $postContent = 'aosidfjoaisdfjoiasdfj';
-        $request->setPostParameters($postContent);
-        unset($expected[CURLOPT_CUSTOMREQUEST]);
-        $expected[CURLOPT_POST] = true;
+        $request->setPayload($postContent);
+        $request->setVerb('POST');
+        $expected[CURLOPT_CUSTOMREQUEST] = 'POST';
         $expected[CURLOPT_POSTFIELDS] = $postContent;
+        // When the payload is a string, the content type should be this
+        $expected[CURLOPT_HTTPHEADER] = array(
+            'Content-Type: application/x-www-form-urlencoded'
+        );
         $this->assertEquals($expected, $request->getCurlOptions());
+        // WHen it's an array, it's this
+        $postContent = array('foo' => 'bar');
+        $request->setPayload($postContent);
+        $expected[CURLOPT_HTTPHEADER] = array(
+            'Content-Type: multipart/form-data'
+        );
+        $expected[CURLOPT_POSTFIELDS] = $postContent;
         $request->setBasicAuthentication('max', 'mypassword123');
         $expected[CURLOPT_USERPWD] = 'max:mypassword123';
         $this->assertEquals($expected, $request->getCurlOptions());
         $request->setHeader('Foo: bar');
-        $expected[CURLOPT_HTTPHEADER] = array('Foo: bar');
+        $expected[CURLOPT_HTTPHEADER][] = 'Foo: bar';
         $this->assertEquals($expected, $request->getCurlOptions());
+    }
+    
+    /**
+     * Confirms that the enforcing of validation on the response works as
+     * expected.
+     */
+    public function testResponseValidation() {
+        $request = new Request('127.0.0.1');
+        $response = array(
+            'foo' => 'a',
+            'bar' => 'b',
+            'baz' => 'c'
+        );
+        /* Note that because a raw response with a non-zero length must be
+        passed to GenericAPI\Request::validateResponse(), but it does not need
+        to have anything to do with the parsed response, I am passing a
+        placeholder argument in these calls. */
+        $request->setResponseValidator(array('foo', 'bar'));
+        // The response can have more keys than the validator checks for
+        $request->validateResponse('a', $response);
+        $request->setResponseValidator(array('foo', 'bar', 'baz', 'asdf'));
+        $this->assertThrows(
+            __NAMESPACE__ . '\ResponseValidationException',
+            array($request, 'validateResponse'),
+            array('a', $response)
+        );
+        $response['asdf'] = 'd';
+        $request->validateResponse('a', $response);
+        $proto = array('response' => array(
+            'foo' => null,
+            'bar' => array('knock-knock' => null),
+            'baz' => null
+        ));
+        $request->setResponseValidator($proto);
+        $request->setResponseValidationMethod(Request::VALIDATE_PROTOTYPE);
+        $response = array('response' => array(
+            'foo' => array('', 1, 'b'),
+            'bar' => array('knock-knock' => "who's there"),
+            'baz' => '927381.29'
+        ));
+        $request->validateResponse('a', $response);
+        /* This doesn't just validate the presence of the array keys, so this
+        should cause a failure. */
+        $response['response']['bar'] = 'asdf';
+        $this->assertThrows(
+            __NAMESPACE__ . '\ResponseValidationException',
+            array($request, 'validateResponse'),
+            array('a', $response)
+        );
+        $response['response']['bar'] = array('knock-knock' => "who's there");
+        // Adding a requirement to the prototype also causes a failure
+        $proto['baz'] = null;
+        $request->setResponseValidator($proto);
+        $this->assertThrows(
+            __NAMESPACE__ . '\ResponseValidationException',
+            array($request, 'validateResponse'),
+            array('a', $response)
+        );
+        // But we can selectively disble validation
+        $request->setResponseValidationMethod(null);
+        $request->validateResponse('a', $response);
     }
 }
 ?>
